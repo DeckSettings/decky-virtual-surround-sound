@@ -3,6 +3,9 @@
   "version": "0.1.0",
   "description": "Create a virtual surround sound audio sink that converts 7.1 surround audio into immersive binaural output for headphones via HRIR processing with multiple presets (Atmos, DTS, Steam, Razer, etc.).",
   "type": "module",
+  "engines": {
+    "node" : ">=18.0.0 <25.0.0"
+  },
   "scripts": {
     "build": "rollup -c",
     "watch": "rollup -c -w",

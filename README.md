@@ -26,7 +26,7 @@ Users of this plugin are able to place a custom .wav from the HRTF Database (<ht
 
 ### Dependencies
 
-This relies on the user having Node.js v16.14+ and `pnpm` (v9) installed on their system.  
+This relies on the user having Node.js v18+ and `pnpm` (v9) installed on their system.  
 Please make sure to install pnpm v9 to prevent issues with CI during plugin submission.  
 `pnpm` can be downloaded from `npm` itself which is recommended.
 
