@@ -158,7 +158,7 @@ class Plugin:
             decky.logger.info("Installing default HRIR .wav file '%s'", default_hrir_file)
             await self.set_hrir_file(os.path.join(hrir_directory, default_hrir_file))
         decky.logger.info("Installing service")
-        await service_script_exec("install")
+        await service_script_exec("install", ["--install-dummy-virtual-sink"])
 
     async def get_surround_sink_default(self):
         """Checks if the Virtual Surround Sound sink should be the default"""
