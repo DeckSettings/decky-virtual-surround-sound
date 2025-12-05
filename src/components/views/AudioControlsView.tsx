@@ -6,7 +6,15 @@ import {
   Focusable, ToggleField, SliderField, Router,
 } from '@decky/ui'
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react'
-import { MixerProfile, PluginConfig, PluginPage, RunningApp, SinkInput, SinkInputConsolidated } from '../../interfaces'
+import {
+  MixerProfile,
+  PluginConfig,
+  PluginPage,
+  RunningApp,
+  SinkInput,
+  SinkInputConsolidated,
+  SinkInputFormat,
+} from '../../interfaces'
 import { MdOutlineWarningAmber, MdSettings } from 'react-icons/md'
 import { call } from '@decky/api'
 import {
@@ -21,7 +29,7 @@ import { popupNotesDialog } from '../elements/NotesDialog'
 
 
 interface AudioControlsViewProps {
-  onChangePage: (page: PluginPage) => void;
+  onChangePage: (page: PluginPage) => void
 }
 
 const AudioControlsView: React.FC<AudioControlsViewProps> = ({ onChangePage }) => {
@@ -46,37 +54,55 @@ const AudioControlsView: React.FC<AudioControlsViewProps> = ({ onChangePage }) =
     }
     // Second try to list all current sink inputs from backend
     try {
-      const sinkInputs = await call<[], SinkInput[]>('get_sink_inputs')
+      const sinkInputs = await call<[], SinkInput[]>('list_sink_inputs')
       if (!sinkInputs) return
 
-      const enabledApps = await call<[], string[]>('get_enabled_apps_list')
+      const enabledApps = await call<[], string[]>('get_enabled_apps_list') ?? []
 
       // Consolidate sink inputs by app name.
       const appMap = new Map<string, SinkInputConsolidated>()
-      sinkInputs.forEach((app) => {
-        const enabled = enabledApps.includes(app.name)
-        if (appMap.has(app.name)) {
-          // Merge formats and ensure no duplicates
-          const existingApp = appMap.get(app.name)!
-          if (!existingApp.formats.some(f =>
-            f.format === app.format.format &&
-            f.sample_format === app.format.sample_format &&
-            f.rate === app.format.rate &&
-            f.channels === app.format.channels,
-          )) {
-            existingApp.formats.push(app.format)
+      sinkInputs.forEach((input) => {
+        if (typeof input.index !== 'number') {
+          return
+        }
+        const appName = input.name?.trim()
+        if (!appName) {
+          return
+        }
+        const enabled = enabledApps.includes(appName)
+        const targetObject = input.target_object ?? ''
+        const volumeSummary = input.volume ?? ''
+        const formatInfo: SinkInputFormat = input.format ?? {
+          format: 'Unknown',
+          sample_format: '',
+          rate: '',
+          channels: '',
+          channel_map: [],
+        }
+        if (appMap.has(appName)) {
+          const existingApp = appMap.get(appName)!
+          const hasFormat = existingApp.formats.some(f =>
+            f.format === formatInfo.format &&
+            f.sample_format === formatInfo.sample_format &&
+            f.rate === formatInfo.rate &&
+            f.channels === formatInfo.channels &&
+            (f.channel_map || []).join(',') === (formatInfo.channel_map || []).join(','),
+          )
+          if (!hasFormat) {
+            existingApp.formats.push(formatInfo)
           }
-          existingApp.index = Math.min(existingApp.index, app.index)
-          existingApp.volume = app.volume
-          existingApp.target_object = app.target_object || existingApp.target_object
+          existingApp.index = Math.min(existingApp.index, input.index)
+          existingApp.volume = volumeSummary || existingApp.volume
+          existingApp.target_object = targetObject || existingApp.target_object
+          existingApp.enabled = enabled
         } else {
           // First occurrence of this app, create a new consolidated entry
-          appMap.set(app.name, {
-            name: app.name,
-            index: app.index,
-            formats: [app.format],
-            volume: app.volume,
-            target_object: app.target_object,
+          appMap.set(appName, {
+            name: appName,
+            index: input.index,
+            formats: [formatInfo],
+            volume: volumeSummary,
+            target_object: targetObject,
             enabled,
           })
         }
@@ -215,7 +241,7 @@ const AudioControlsView: React.FC<AudioControlsViewProps> = ({ onChangePage }) =
       <div>
         <PanelSection>
           <Focusable style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}
-                     flow-children="horizontal">
+            flow-children="horizontal">
             <DialogButton
               style={{ width: '100%', minWidth: 0 }}
               onClick={() => onChangePage('plugin_config')}>
@@ -257,14 +283,14 @@ const AudioControlsView: React.FC<AudioControlsViewProps> = ({ onChangePage }) =
                   }}>
                     {app.formats.map((format, index) => (
                       <li key={index}
-                          style={{
-                            display: 'table',
-                            textAlign: 'right',
-                            width: '100%',
-                            borderBottom: '1px solid #333',
-                            paddingTop: '2px',
-                            paddingBottom: '2px',
-                          }}>
+                        style={{
+                          display: 'table',
+                          textAlign: 'right',
+                          width: '100%',
+                          borderBottom: '1px solid #333',
+                          paddingTop: '2px',
+                          paddingBottom: '2px',
+                        }}>
                         <strong style={{
                           display: 'table-cell',
                           textAlign: 'left',

@@ -254,7 +254,9 @@ fi
 pid_file="${XDG_RUNTIME_DIR:?}/${virtual_surround_sink_name:?}.pid"
 service_name="${virtual_surround_sink_name:?}.service"
 service_file="${HOME:?}/.config/systemd/user/${service_name:?}"
-service_config=$(
+run_script="${HOME:?}/.config/pipewire/run.sh"
+dummy_virtual_sink_path="${HOME:?}/.config/pipewire/pipewire.conf.d/virtual-sink.conf"
+service_config=$( 
     cat <<EOF
 [Unit]
 Description=${virtual_surround_sink_description:?}
@@ -268,10 +270,35 @@ Restart=always
 RestartSec=1
 StartLimitInterval=5
 StartLimitBurst=5
-ExecStart=${script_directory:?}/service.sh run
+ExecStart=${run_script:?}
 
 [Install]
 WantedBy=default.target
+EOF
+)
+run_script_contents=$( 
+    cat <<EOF
+#!/bin/bash
+set -euo pipefail
+
+cleanup() {
+    echo "Missing service script at '${script_directory:?}/service.sh'. Cleaning up systemd unit: ${service_name}"
+    systemctl --user disable "${service_name}" >/dev/null 2>&1 || true
+    rm -f "${service_file}" >/dev/null 2>&1 || true
+    systemctl --user daemon-reload >/dev/null 2>&1 || true
+    if [[ -f "${dummy_virtual_sink_path:?}" ]]; then
+        rm -f "${dummy_virtual_sink_path:?}" >/dev/null 2>&1 || true
+    fi
+    rm -f "${run_script:?}" >/dev/null 2>&1 || true
+}
+
+echo "Checking for service script..."
+if [[ ! -f "${script_directory:?}/service.sh" ]]; then
+    cleanup
+    exit 0
+fi
+
+exec "${script_directory:?}/service.sh" run
 EOF
 )
 
@@ -417,16 +444,17 @@ install_service() {
             "${HOME:?}/.config/pipewire/tmp" \
             "${HOME:?}/.config/pipewire/pipewire.conf.d"
         # Only install and restart pipewire if the config has changed
-        echo "${dummy_virtual_sink_2:?}" >"${HOME:?}/.config/pipewire/tmp/virtual-sink.conf"
+        local dummy_virtual_sink_tmp="${HOME:?}/.config/pipewire/tmp/virtual-sink.conf"
+        echo "${dummy_virtual_sink_2:?}" >"${dummy_virtual_sink_tmp:?}"
         local dummy_virtual_sink_modified="false"
-        if [[ ! -f "${HOME:?}/.config/pipewire/pipewire.conf.d/virtual-sink.conf" ]]; then
+        if [[ ! -f "${dummy_virtual_sink_path:?}" ]]; then
             dummy_virtual_sink_modified="true"
-        elif ! cmp -s "${HOME:?}/.config/pipewire/tmp/virtual-sink.conf" "${HOME:?}/.config/pipewire/pipewire.conf.d/virtual-sink.conf"; then
+        elif ! cmp -s "${dummy_virtual_sink_tmp:?}" "${dummy_virtual_sink_path:?}"; then
             dummy_virtual_sink_modified="true"
         fi
         if [[ "${dummy_virtual_sink_modified:-}" = "true" ]]; then
             echo "  - Installing dummy virtual-sink.conf"
-            cp -f "${HOME:?}/.config/pipewire/tmp/virtual-sink.conf" "${HOME:?}/.config/pipewire/pipewire.conf.d/virtual-sink.conf"
+            cp -f "${dummy_virtual_sink_tmp:?}" "${dummy_virtual_sink_path:?}"
             echo "  - Restarting wireplumber pipewire pipewire-pulse systemd services"
             systemctl --user restart wireplumber pipewire pipewire-pulse
         else
@@ -438,6 +466,9 @@ install_service() {
     echo "  - Ensure directory and all contents is RW by the user"
     chmod 755 "${HOME:?}/.config/pipewire"
     chmod u+rw -R "${HOME:?}/.config/pipewire"
+    echo "  - Installing run wrapper script: ${run_script:?}"
+    echo "${run_script_contents:?}" >"${run_script:?}"
+    chmod +x "${run_script:?}"
     echo "  - Installing systemd unit: ${service_file:?}"
     echo "${service_config:?}" >"${service_file:?}"
     echo "  - Exec daemon-reload"
@@ -462,8 +493,10 @@ uninstall_service() {
         rm -f "${service_file}"
         echo "  - Exec daemon-reload"
         systemctl --user daemon-reload
+        echo "  - Removing run wrapper script: ${run_script:?}"
+        rm -f "${run_script:?}"
         echo "  - Removing custom virtual-sink.conf"
-        rm -f "${HOME:?}/.config/pipewire/pipewire.conf.d/virtual-sink.conf"
+        rm -f "${dummy_virtual_sink_path:?}"
         echo "Systemd service stopped and uninstalled."
     else
         echo "Systemd service has not been installed. Run this script with the 'install' command to install it."

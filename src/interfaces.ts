@@ -51,15 +51,17 @@ export interface SinkInputFormat {
   sample_format: string;
   rate: string;
   channels: string;
+  channel_map: string[];
 }
 
 export interface SinkInput {
-  name: string;
+  name?: string;
   index: number;
-  sink: number;
+  sink?: number;
   format: SinkInputFormat;
   volume: string;
-  target_object: string;
+  target_object?: string;
+  properties?: Record<string, string>;
 }
 
 export interface SinkInputConsolidated {
