@@ -1,7 +1,6 @@
 import asyncio
 import asyncio.subprocess
 import contextlib
-import curses
 import datetime
 from collections.abc import Awaitable, Callable
 import json
@@ -1013,6 +1012,15 @@ class CLIHelper:
 class CLIMenu:
     """Curses-driven CLI for interacting with Plugin helpers."""
 
+    _curses_module = None
+
+    @classmethod
+    def _ensure_curses(cls):
+        if cls._curses_module is None:
+            import curses as curses_module
+            cls._curses_module = curses_module
+        return cls._curses_module
+
     def __init__(self, plugin: Plugin):
         self.plugin = plugin
         self.helper = CLIHelper()
@@ -1029,14 +1037,16 @@ class CLIMenu:
             ("Test random mixer profile", self.random_mixer_profile_action),
         ]
 
-    @staticmethod
-    def _safe_curs_set(mode: int):
+    @classmethod
+    def _safe_curs_set(cls, mode: int):
+        curses = cls._ensure_curses()
         try:
             curses.curs_set(mode)
         except curses.error:
             pass
 
     def _navigate_menu(self, stdscr, title: str, labels: list[str], footer: str) -> int | None:
+        curses = self._ensure_curses()
         if not labels:
             return None
         index = 0
@@ -1082,6 +1092,7 @@ class CLIMenu:
                     return index
 
     def _show_scrollable_text(self, stdscr, title: str, lines: list[str], footer: str = "Press Enter to return"):
+        curses = self._ensure_curses()
         content = lines or ["No data to display."]
         top = 0
         while True:
@@ -1343,6 +1354,7 @@ class CLIMenu:
             handler(stdscr)
 
     def run(self):
+        curses = self._ensure_curses()
         try:
             curses.wrapper(self._main_menu)
         finally:
