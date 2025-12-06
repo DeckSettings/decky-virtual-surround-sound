@@ -134,6 +134,8 @@ hrir_directory = os.path.join(script_directory, "hrir-audio")
 default_hrir_file = "HRTF from Aureal Vortex 2 - WIP v2.wav"
 pipewire_config_path = os.path.join(os.path.expanduser("~"), ".config", "pipewire")
 hrir_dest_path = os.path.join(pipewire_config_path, "hrir.wav")
+sofa_directory = os.path.join(script_directory, "hrtf-sofa")
+sofa_dest_path = os.path.join(pipewire_config_path, "hrir.sofa")
 
 VIRTUAL_SURROUND_FILTER_SINK_NODE = "input.virtual-surround-sound-filter"
 VIRTUAL_SURROUND_DEVICE_SINK_NODE = "input.virtual-surround-sound-input"
@@ -512,6 +514,44 @@ class Plugin:
             return True
         except Exception as e:
             decky.logger.error("Error: Failed to copy HRIR WAV file: %s", e)
+        return False
+
+    async def get_sofa_file_list(self) -> list[dict[str, str | None | int]] | None:
+        """Lists available SOFA files."""
+        sofa_files: list[dict[str, str | None | int]] = []
+        try:
+            os.makedirs(sofa_directory, exist_ok=True)
+        except OSError:
+            pass
+        for filename in os.listdir(sofa_directory):
+            if filename.endswith(".sofa") and os.path.isfile(os.path.join(sofa_directory, filename)):
+                filepath = os.path.join(sofa_directory, filename)
+                file_size: int | None
+                try:
+                    file_size = os.path.getsize(filepath)
+                except OSError:
+                    file_size = None
+                sofa_files.append({
+                    "label": os.path.splitext(os.path.basename(filepath))[0],
+                    "path": filepath,
+                    "size": file_size
+                })
+        if sofa_files:
+            sofa_files.sort(key=lambda x: x.get("label") or "")
+        return sofa_files
+
+    async def set_sofa_file(self, selected_sofa_path: str) -> bool:
+        """Installs the specified SOFA file."""
+        decky.logger.info("Installing %s", selected_sofa_path)
+        try:
+            os.makedirs(os.path.dirname(sofa_dest_path), exist_ok=True)
+            shutil.copy2(selected_sofa_path, sofa_dest_path)
+            os.chmod(sofa_dest_path, 0o644)
+            decky.logger.info("Copied %s to %s", selected_sofa_path, sofa_dest_path)
+            await service_script_exec("restart")
+            return True
+        except Exception as e:
+            decky.logger.error("Error: Failed to copy SOFA file: %s", e)
         return False
 
     async def run_sound_test(self, sink: str):
@@ -936,7 +976,7 @@ class Plugin:
                             if existing:
                                 continue
                             entry["name"] = new_name
-                            return normalized_inputs
+            return normalized_inputs
         except FileNotFoundError:
             decky.logger.error("pactl not found.")
             return []
@@ -1269,6 +1309,8 @@ class CLIMenu:
             ("Toggle Virtual Surround Sound as default sink", self.toggle_default_surround_action),
             ("List HRIR files", self.list_hrir_files_action),
             ("Set HRIR file", self.set_hrir_file_action),
+            ("List SOFA files", self.list_sofa_files_action),
+            ("Set SOFA file", self.set_sofa_file_action),
             ("Run sound test", self.run_sound_test_action),
             ("Test random mixer profile", self.random_mixer_profile_action),
         ]
@@ -1383,14 +1425,18 @@ class CLIMenu:
             self._show_message(stdscr, "Toggle App", "No running apps detected.")
             return
         grouped: dict[str, list[dict]] = {}
+        canonical_for_name: dict[str, str] = {}
         for entry in sink_inputs:
-            name = entry.get("name") or self.plugin._sink_input_app_name(entry) or f"Sink Input {entry.get('index')}"
-            grouped.setdefault(name, []).append(entry)
+            display_name = entry.get("name") or self.plugin._sink_input_app_name(entry) or f"Sink Input {entry.get('index')}"
+            canonical_name = self.plugin._sink_input_app_name(entry) or display_name
+            canonical_for_name.setdefault(display_name, canonical_name)
+            grouped.setdefault(display_name, []).append(entry)
         enabled_apps = self.helper.run(self.plugin.get_enabled_apps_list()) or []
         app_names = sorted(grouped.keys())
         labels = []
         for name in app_names:
-            status = "Enabled" if name in enabled_apps else "Disabled"
+            canonical = canonical_for_name.get(name, name)
+            status = "Enabled" if canonical in enabled_apps else "Disabled"
             labels.append(f"{name} [{status}] - {len(grouped[name])} stream(s)")
         selection = self._navigate_menu(
             stdscr,
@@ -1401,11 +1447,12 @@ class CLIMenu:
         if selection is None:
             return
         chosen = app_names[selection]
-        if chosen in enabled_apps:
-            self.helper.run(self.plugin.disable_for_app(chosen))
+        canonical_chosen = canonical_for_name.get(chosen, chosen)
+        if canonical_chosen in enabled_apps:
+            self.helper.run(self.plugin.disable_for_app(canonical_chosen))
             self._show_message(stdscr, "Toggle App", f"'{chosen}' disabled for Virtual Surround Sound.")
         else:
-            self.helper.run(self.plugin.enable_for_app(chosen))
+            self.helper.run(self.plugin.enable_for_app(canonical_chosen))
             self._show_message(stdscr, "Toggle App", f"'{chosen}' enabled for Virtual Surround Sound.")
 
     def toggle_default_surround_action(self, stdscr):
@@ -1461,6 +1508,57 @@ class CLIMenu:
             )
         else:
             self._show_message(stdscr, "Set HRIR File", "Failed to install selected HRIR file.")
+
+    def list_sofa_files_action(self, stdscr):
+        files = self.helper.run(self.plugin.get_sofa_file_list()) or []
+        lines: list[str] = []
+        if not files:
+            lines.append("No SOFA files found.")
+        else:
+            for idx, entry in enumerate(files, start=1):
+                label = entry.get("label") or entry.get("path") or f"SOFA File {idx}"
+                lines.append(f"{idx}. {label}")
+                file_path = entry.get("path")
+                if file_path:
+                    lines.append(f"    {file_path}")
+                size = entry.get("size")
+                if isinstance(size, int):
+                    lines.append(f"    size: {size} bytes")
+        self._show_scrollable_text(stdscr, "SOFA Files", lines)
+
+    def set_sofa_file_action(self, stdscr):
+        files = self.helper.run(self.plugin.get_sofa_file_list()) or []
+        if not files:
+            self._show_message(stdscr, "Set SOFA File", "No SOFA files available.")
+            return
+        labels = []
+        for entry in files:
+            label = entry.get("label") or entry.get("path")
+            labels.append(label or "SOFA file")
+        selection = self._navigate_menu(
+            stdscr,
+            "Select SOFA File",
+            labels,
+            "↑/↓ navigate • Enter install • q cancel"
+        )
+        if selection is None:
+            return
+        selected = files[selection]
+        path = selected.get("path")
+        if not isinstance(path, str):
+            self._show_message(stdscr, "Set SOFA File", "Invalid SOFA file entry.")
+            return
+        label_text = selected.get("label") or os.path.basename(path)
+        success = self.helper.run(self.plugin.set_sofa_file(path))
+        if success:
+            self.helper.run_delayed(lambda: self.plugin.check_state(), 5.0)
+            self._show_message(
+                stdscr,
+                "Set SOFA File",
+                f"Installed '{label_text}'.\nRechecking sink assignments shortly."
+            )
+        else:
+            self._show_message(stdscr, "Set SOFA File", "Failed to install selected SOFA file.")
 
     def run_sound_test_action(self, stdscr):
         sinks = self.helper.run(self.plugin.list_sinks())

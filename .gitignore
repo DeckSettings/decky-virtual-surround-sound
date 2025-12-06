@@ -58,6 +58,7 @@ cli/decky
 
 # Dev env setup
 /hrir-audio
+/hrtf-sofa
 /service.sh
 /decky.py
 /source.sh

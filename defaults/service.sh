@@ -11,24 +11,19 @@ _term() {
     cleanup_virtual_surround_module
     cleanup_virtual_surround_default_sink
 }
-trap '_term' INT QUIT HUP TERM ERR
 
-# Define the HRIR channel matching and attenuation
+service_shutdown_requested="false"
+_handle_signal() {
+    if [[ "${service_shutdown_requested}" == "true" ]]; then
+        return
+    fi
+    service_shutdown_requested="true"
+    _term
+    exit 1
+}
+trap '_handle_signal' INT QUIT HUP TERM ERR
+
 mix_gain_db="-6dB"
-hrir_fl_left=0
-hrir_fl_right=1
-hrir_fr_left=8
-hrir_fr_right=7
-hrir_fc_left=6
-hrir_fc_right=13
-hrir_rl_left=4
-hrir_rl_right=5
-hrir_rr_left=12
-hrir_rr_right=11
-hrir_sl_left=2
-hrir_sl_right=3
-hrir_sr_left=10
-hrir_sr_right=9
 
 # Configure pipewire module
 virtual_surround_filter_sink_node="virtual-surround-sound-filter"
@@ -89,7 +84,7 @@ device_module_args_8=$(
 }
 EOF
 )
-filter_module_args_8=$(
+filter_module_convolver_args_8=$(
     cat <<EOF
 {
     "audio.channels": 8,
@@ -106,22 +101,22 @@ filter_module_args_8=$(
             { "type": "builtin", "label": "copy", "name": "copySL" },
             { "type": "builtin", "label": "copy", "name": "copySR" },
             { "type": "builtin", "label": "copy", "name": "copyLFE" },
-            { "type": "builtin", "label": "convolver", "name": "convFL_L", "config": { "filename": "${HOME:?}/.config/pipewire/hrir.wav", "channel": ${hrir_fl_left:?} } },
-            { "type": "builtin", "label": "convolver", "name": "convFL_R", "config": { "filename": "${HOME:?}/.config/pipewire/hrir.wav", "channel": ${hrir_fl_right:?} } },
-            { "type": "builtin", "label": "convolver", "name": "convSL_L", "config": { "filename": "${HOME:?}/.config/pipewire/hrir.wav", "channel": ${hrir_sl_left:?} } },
-            { "type": "builtin", "label": "convolver", "name": "convSL_R", "config": { "filename": "${HOME:?}/.config/pipewire/hrir.wav", "channel": ${hrir_sl_right:?} } },
-            { "type": "builtin", "label": "convolver", "name": "convRL_L", "config": { "filename": "${HOME:?}/.config/pipewire/hrir.wav", "channel": ${hrir_rl_left:?} } },
-            { "type": "builtin", "label": "convolver", "name": "convRL_R", "config": { "filename": "${HOME:?}/.config/pipewire/hrir.wav", "channel": ${hrir_rl_right:?} } },
-            { "type": "builtin", "label": "convolver", "name": "convFC_L", "config": { "filename": "${HOME:?}/.config/pipewire/hrir.wav", "channel": ${hrir_fc_left:?} } },
-            { "type": "builtin", "label": "convolver", "name": "convFR_R", "config": { "filename": "${HOME:?}/.config/pipewire/hrir.wav", "channel": ${hrir_fr_right:?} } },
-            { "type": "builtin", "label": "convolver", "name": "convFR_L", "config": { "filename": "${HOME:?}/.config/pipewire/hrir.wav", "channel": ${hrir_fr_left:?} } },
-            { "type": "builtin", "label": "convolver", "name": "convSR_R", "config": { "filename": "${HOME:?}/.config/pipewire/hrir.wav", "channel": ${hrir_sr_right:?} } },
-            { "type": "builtin", "label": "convolver", "name": "convSR_L", "config": { "filename": "${HOME:?}/.config/pipewire/hrir.wav", "channel": ${hrir_sr_left:?} } },
-            { "type": "builtin", "label": "convolver", "name": "convRR_R", "config": { "filename": "${HOME:?}/.config/pipewire/hrir.wav", "channel": ${hrir_rr_right:?} } },
-            { "type": "builtin", "label": "convolver", "name": "convRR_L", "config": { "filename": "${HOME:?}/.config/pipewire/hrir.wav", "channel": ${hrir_rr_left:?} } },
-            { "type": "builtin", "label": "convolver", "name": "convFC_R", "config": { "filename": "${HOME:?}/.config/pipewire/hrir.wav", "channel": ${hrir_fc_right:?} } },
-            { "type": "builtin", "label": "convolver", "name": "convLFE_L", "config": { "filename": "${HOME:?}/.config/pipewire/hrir.wav", "channel": ${hrir_fc_left:?} } },
-            { "type": "builtin", "label": "convolver", "name": "convLFE_R", "config": { "filename": "${HOME:?}/.config/pipewire/hrir.wav", "channel": ${hrir_fc_right:?} } },
+            { "type": "builtin", "label": "convolver", "name": "convFL_L", "config": { "filename": "${HOME:?}/.config/pipewire/hrir.wav", "channel": 0 } },
+            { "type": "builtin", "label": "convolver", "name": "convFL_R", "config": { "filename": "${HOME:?}/.config/pipewire/hrir.wav", "channel": 1 } },
+            { "type": "builtin", "label": "convolver", "name": "convSL_L", "config": { "filename": "${HOME:?}/.config/pipewire/hrir.wav", "channel": 2 } },
+            { "type": "builtin", "label": "convolver", "name": "convSL_R", "config": { "filename": "${HOME:?}/.config/pipewire/hrir.wav", "channel": 3 } },
+            { "type": "builtin", "label": "convolver", "name": "convRL_L", "config": { "filename": "${HOME:?}/.config/pipewire/hrir.wav", "channel": 4 } },
+            { "type": "builtin", "label": "convolver", "name": "convRL_R", "config": { "filename": "${HOME:?}/.config/pipewire/hrir.wav", "channel": 5 } },
+            { "type": "builtin", "label": "convolver", "name": "convFC_L", "config": { "filename": "${HOME:?}/.config/pipewire/hrir.wav", "channel": 6 } },
+            { "type": "builtin", "label": "convolver", "name": "convFR_R", "config": { "filename": "${HOME:?}/.config/pipewire/hrir.wav", "channel": 7 } },
+            { "type": "builtin", "label": "convolver", "name": "convFR_L", "config": { "filename": "${HOME:?}/.config/pipewire/hrir.wav", "channel": 8 } },
+            { "type": "builtin", "label": "convolver", "name": "convSR_R", "config": { "filename": "${HOME:?}/.config/pipewire/hrir.wav", "channel": 9 } },
+            { "type": "builtin", "label": "convolver", "name": "convSR_L", "config": { "filename": "${HOME:?}/.config/pipewire/hrir.wav", "channel": 10 } },
+            { "type": "builtin", "label": "convolver", "name": "convRR_R", "config": { "filename": "${HOME:?}/.config/pipewire/hrir.wav", "channel": 11 } },
+            { "type": "builtin", "label": "convolver", "name": "convRR_L", "config": { "filename": "${HOME:?}/.config/pipewire/hrir.wav", "channel": 12 } },
+            { "type": "builtin", "label": "convolver", "name": "convFC_R", "config": { "filename": "${HOME:?}/.config/pipewire/hrir.wav", "channel": 13 } },
+            { "type": "builtin", "label": "convolver", "name": "convLFE_L", "config": { "filename": "${HOME:?}/.config/pipewire/hrir.wav", "channel": 6 } },
+            { "type": "builtin", "label": "convolver", "name": "convLFE_R", "config": { "filename": "${HOME:?}/.config/pipewire/hrir.wav", "channel": 13 } },
             { "type": "builtin", "label": "mixer", "name": "mixL" },
             { "type": "builtin", "label": "mixer", "name": "mixR" }
         ],
@@ -163,6 +158,8 @@ filter_module_args_8=$(
         "outputs": [ "mixL:Out", "mixR:Out" ]
     },
     capture.props = {
+        "node.name": "input.${virtual_surround_filter_sink_node:?}",
+        "node.description": "${virtual_surround_filter_sink_description:?}",
         "media.class": "Audio/Sink",
         "audio.channels": 8,
         "audio.position": [ FL FR FC LFE RL RR SL SR ],
@@ -173,6 +170,167 @@ filter_module_args_8=$(
         "channelmix.normalize": false
     },
     playback.props = {
+        "node.name": "output.${virtual_surround_filter_sink_node:?}",
+        "node.passive": true,
+        "node.autoconnect": false,
+        "audio.channels": 2,
+        "audio.position": [ FL FR ],
+        "stream.dont-remix": true,
+        "channelmix.normalize": false
+    }
+}
+EOF
+)
+filter_module_sofa_args_8=$(
+    cat <<EOF
+{
+    "audio.channels": 8,
+    "audio.position": ["FL","FR","FC","LFE","RL","RR","SL","SR"],
+    "node.name": "${virtual_surround_filter_sink_node:?}",
+    "node.description": "${virtual_surround_filter_sink_description:?}",
+    filter.graph = {
+        "nodes": [
+            {
+                "type": "sofa",
+                "label": "spatializer",
+                "name": "spFL",
+                "config": {
+                    "filename": "${HOME:?}/.config/pipewire/hrir.sofa"
+                },
+                "control": {
+                    "Azimuth": 30.0,
+                    "Elevation": -10.0,
+                    "Radius": 10.0
+                }
+            },
+            {
+                "type": "sofa",
+                "label": "spatializer",
+                "name": "spFR",
+                "config": {
+                    "filename": "${HOME:?}/.config/pipewire/hrir.sofa"
+                },
+                "control": {
+                    "Azimuth": 330.0,
+                    "Elevation": -10.0,
+                    "Radius": 10.0
+                }
+            },
+            {
+                "type": "sofa",
+                "label": "spatializer",
+                "name": "spFC",
+                "config": {
+                    "filename": "${HOME:?}/.config/pipewire/hrir.sofa"
+                },
+                "control": {
+                    "Azimuth": 0.0,
+                    "Elevation": -10.0,
+                    "Radius": 10.0
+                }
+            },
+            {
+                "type": "sofa",
+                "label": "spatializer",
+                "name": "spRL",
+                "config": {
+                    "filename": "${HOME:?}/.config/pipewire/hrir.sofa"
+                },
+                "control": {
+                    "Azimuth": 150.0,
+                    "Elevation": -10.0,
+                    "Radius": 10.0
+                }
+            },
+            {
+                "type": "sofa",
+                "label": "spatializer",
+                "name": "spRR",
+                "config": {
+                    "filename": "${HOME:?}/.config/pipewire/hrir.sofa"
+                },
+                "control": {
+                    "Azimuth": 210.0,
+                    "Elevation": -10.0,
+                    "Radius": 10.0
+                }
+            },
+            {
+                "type": "sofa",
+                "label": "spatializer",
+                "name": "spSL",
+                "config": {
+                    "filename": "${HOME:?}/.config/pipewire/hrir.sofa"
+                },
+                "control": {
+                    "Azimuth": 90.0,
+                    "Elevation": -10.0,
+                    "Radius": 10.0
+                }
+            },
+            {
+                "type": "sofa",
+                "label": "spatializer",
+                "name": "spSR",
+                "config": {
+                    "filename": "${HOME:?}/.config/pipewire/hrir.sofa"
+                },
+                "control": {
+                    "Azimuth": 270.0,
+                    "Elevation": -10.0,
+                    "Radius": 10.0
+                }
+            },
+            {
+                "type": "sofa",
+                "label": "spatializer",
+                "name": "spLFE",
+                "config": {
+                    "filename": "${HOME:?}/.config/pipewire/hrir.sofa"
+                },
+                "control": {
+                    "Azimuth": 0.0,
+                    "Elevation": -60.0,
+                    "Radius": 3.0
+                }
+            },
+            { "type": "builtin", "label": "mixer", "name": "mixL" },
+            { "type": "builtin", "label": "mixer", "name": "mixR" }
+        ],
+        "links": [
+            { "output": "spFL:Out L", "input": "mixL:In 1" },
+            { "output": "spFL:Out R", "input": "mixR:In 1" },
+            { "output": "spFR:Out L", "input": "mixL:In 2" },
+            { "output": "spFR:Out R", "input": "mixR:In 2" },
+            { "output": "spFC:Out L", "input": "mixL:In 3" },
+            { "output": "spFC:Out R", "input": "mixR:In 3" },
+            { "output": "spRL:Out L", "input": "mixL:In 4" },
+            { "output": "spRL:Out R", "input": "mixR:In 4" },
+            { "output": "spRR:Out L", "input": "mixL:In 5" },
+            { "output": "spRR:Out R", "input": "mixR:In 5" },
+            { "output": "spSL:Out L", "input": "mixL:In 6" },
+            { "output": "spSL:Out R", "input": "mixR:In 6" },
+            { "output": "spSR:Out L", "input": "mixL:In 7" },
+            { "output": "spSR:Out R", "input": "mixR:In 7" },
+            { "output": "spLFE:Out L", "input": "mixL:In 8" },
+            { "output": "spLFE:Out R", "input": "mixR:In 8" }
+        ],
+        "inputs":  [ "spFL:In", "spFR:In", "spFC:In", "spLFE:In", "spRL:In", "spRR:In", "spSL:In", "spSR:In" ],
+        "outputs": [ "mixL:Out", "mixR:Out" ]
+    },
+    capture.props = {
+        "node.name": "input.${virtual_surround_filter_sink_node:?}",
+        "media.class": "Audio/Sink",
+        "audio.channels": 8,
+        "audio.position": [ FL FR FC LFE RL RR SL SR ],
+        "node.dont-fallback": true,
+        "node.linger": true,
+        "node.autoconnect": false,
+        "stream.dont-remix": true,
+        "channelmix.normalize": false
+    },
+    playback.props = {
+        "node.name": "output.${virtual_surround_filter_sink_node:?}",
         "node.passive": true,
         "node.autoconnect": false,
         "audio.channels": 2,
@@ -223,7 +381,9 @@ ExecStart=${run_script:?}
 WantedBy=default.target
 EOF
 )
-run_script_contents=$(
+
+get_run_script_contents() {
+    local filter_type="${1:-convolver}"
     cat <<EOF
 #!/bin/bash
 set -euo pipefail
@@ -242,9 +402,9 @@ if [[ ! -f "${script_directory:?}/service.sh" ]]; then
     exit 0
 fi
 
-exec "${script_directory:?}/service.sh" run
+exec "${script_directory:?}/service.sh" run --filter=${filter_type:?}
 EOF
-)
+}
 
 virtual_surround_filter_sink_pw_cli_pid=""
 virtual_surround_device_sink_pw_cli_pid=""
@@ -281,12 +441,16 @@ cleanup_virtual_surround_module() {
 }
 
 create_virtual_surround_module() {
-    local channel_count="${1:-8}"
-    local module_args="${filter_module_args_8}"
+    local filter_type="${1:-convolver}"
+    local channel_count="8"
+    local module_args="${filter_module_convolver_args_8}"
+    if [[ "${filter_type}" == "sofa" ]]; then
+        module_args="${filter_module_sofa_args_8}"
+    fi
 
     cleanup_virtual_surround_module
 
-    echo "Creating and loading module libpipewire-module-filter-chain with ${channel_count:?} channels - ${virtual_surround_filter_sink_name:?}"
+    echo "Creating and loading module libpipewire-module-filter-chain (${filter_type:?}) with ${channel_count:?} channels - ${virtual_surround_filter_sink_name:?}"
     pw-cli -m load-module libpipewire-module-filter-chain "${module_args:?}" &
     virtual_surround_filter_sink_pw_cli_pid=$!
     echo "${virtual_surround_filter_sink_pw_cli_pid:?}" >"${filter_module_pid_file:?}"
@@ -514,15 +678,34 @@ is_pid_running() {
 
 run() {
     echo "Running service"
-    if [[ $# -gt 0 ]]; then
-        echo "Invalid arg: $1"
-        print_usage_and_exit 1
+    local filter_type="convolver"
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+        --filter=*)
+            filter_type="${1#*=}"
+            ;;
+        --filter)
+            shift
+            filter_type="$1"
+            ;;
+        *)
+            echo "Invalid arg: $1"
+            print_usage_and_exit 1
+            ;;
+        esac
+        shift
+    done
+
+    if [[ "${filter_type}" != "convolver" && "${filter_type}" != "sofa" ]]; then
+        echo "Invalid filter value: ${filter_type}. Must be convolver or sofa."
+        exit 1
     fi
+
     local channels="8"
 
     reset_default_sink
 
-    if ! create_virtual_surround_module "${channels:?}"; then
+    if ! create_virtual_surround_module "${filter_type:?}"; then
         _term
         exit 1
     fi
@@ -587,11 +770,19 @@ speaker_test() {
 
 install_service() {
     echo "Installing service: ${service_name:?}"
+    local install_filter_type="convolver"
     local restart_after_install="false"
     while [[ $# -gt 0 ]]; do
         case "$1" in
         --restart-after-install)
             restart_after_install="true"
+            ;;
+        --filter=*)
+            install_filter_type="${1#*=}"
+            ;;
+        --filter)
+            shift
+            install_filter_type="$1"
             ;;
         *)
             echo "Invalid arg: $1"
@@ -600,6 +791,12 @@ install_service() {
         esac
         shift
     done
+    if [[ "${install_filter_type}" != "convolver" && "${install_filter_type}" != "sofa" ]]; then
+        echo "Invalid filter value: ${install_filter_type}. Must be convolver or sofa."
+        exit 1
+    fi
+    local run_script_contents
+    run_script_contents=$(get_run_script_contents "${install_filter_type:?}")
     echo "  - Creating directory: '${HOME:?}/.config/pipewire'"
     mkdir -p "${HOME:?}/.config/pipewire"
     echo "  - Ensure directory and all contents is RW by the user"
@@ -667,7 +864,7 @@ stop_service() {
 }
 
 print_usage_and_exit() {
-    echo "Usage: $0 {run|install|uninstall|restart|stop|kill-all} [additional args...]"
+    echo "Usage: $0 {run|install|uninstall|restart|stop|kill-all} [--filter=<convolver|sofa>] [additional args...]"
     exit "$1"
 }
 
