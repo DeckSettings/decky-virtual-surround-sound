@@ -256,11 +256,11 @@ class Plugin:
         decky.logger.info("Background tasks started")
         while not self.stop_event.is_set():
             try:
-                decky.logger.info("Running task to ensure applications are assigned to their configured sinks")
+                #decky.logger.info("Running task to ensure applications are assigned to their configured sinks")
                 await self.check_state()
-                # Wait for 30 seconds, or exit early if stop_event is set.
+                # Wait for 10 seconds, or exit early if stop_event is set.
                 try:
-                    await asyncio.wait_for(self.stop_event.wait(), timeout=30)
+                    await asyncio.wait_for(self.stop_event.wait(), timeout=10)
                 except asyncio.TimeoutError:
                     # Timeout occurred: continue loop.
                     pass
@@ -344,7 +344,7 @@ class Plugin:
             decky.logger.error("Required sink not found. Virtual Surround Sound is missing.")
             return
         if not virtual_sink:
-            decky.logger.warning("Virtual Sink is missing. Will attempt to detect the current default sink instead.")
+            decky.logger.debug("Virtual Sink is missing. Will attempt to detect the current default sink instead.")
 
         virtual_surround_object_id = self._object_id_from_sink(virtual_surround_filter_sink)
         virtual_surround_index = self._sink_index_from_entry(virtual_surround_filter_sink)
@@ -358,7 +358,6 @@ class Plugin:
         # Determine the default_sink_id and default_sink_index
         default_sink_id: int | None = None
         default_sink_index: int | None = None
-        default_sink_entry = virtual_sink
         if virtual_sink:
             default_sink_id = self._object_id_from_sink(virtual_sink)
             default_sink_index = self._sink_index_from_entry(virtual_sink)
@@ -366,7 +365,6 @@ class Plugin:
                 decky.logger.warning("Virtual Sink is missing metadata; unable to use as fallback.")
                 default_sink_id = None
                 default_sink_index = None
-                default_sink_entry = None
 
         if default_sink_id is None or default_sink_index is None:
             fallback_sink_id = await self.get_highest_priority_sink_id()
@@ -378,8 +376,7 @@ class Plugin:
                 if fallback_sink:
                     default_sink_id = self._object_id_from_sink(fallback_sink)
                     default_sink_index = self._sink_index_from_entry(fallback_sink)
-                    default_sink_entry = fallback_sink
-                    decky.logger.info(
+                    decky.logger.debug(
                         "Using highest priority sink (object %s, index %s).",
                         default_sink_id, default_sink_index
                     )
@@ -1011,7 +1008,7 @@ class Plugin:
                     stderr.decode().strip(),
                 )
                 return False
-            decky.logger.info(
+            decky.logger.debug(
                 "Default sink set via wpctl to %s. %s",
                 sink_input_index,
                 stdout.decode().strip(),
