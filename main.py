@@ -1,3 +1,4 @@
+import argparse
 import asyncio
 import asyncio.subprocess
 import contextlib
@@ -11,13 +12,35 @@ import re
 import shutil
 import threading
 import time
+import sys
+
+script_directory = os.path.dirname(os.path.abspath(__file__))
+default_env_dirs = {
+    "DECKY_PLUGIN_LOG_DIR": os.path.join(script_directory, "tmp", "logs"),
+    "DECKY_PLUGIN_SETTINGS_DIR": os.path.join(script_directory, "tmp", "config"),
+    "DECKY_PLUGIN_RUNTIME_DIR": os.path.join(script_directory, "tmp", "runtime"),
+}
+cli_env_defaults_applied = False
+for env_key, default_path in default_env_dirs.items():
+    current_value = os.environ.get(env_key)
+    if not current_value:
+        os.environ[env_key] = default_path
+        current_value = default_path
+        cli_env_defaults_applied = True
+    try:
+        os.makedirs(current_value, exist_ok=True)
+    except OSError:
+        pass
 
 # The decky plugin module is located at decky-loader/plugin
 # For easy intellisense checkout the decky-loader code repo
 # and add the `decky-loader/plugin/imports` path to `python.analysis.extraPaths` in `.vscode/settings.json`
+IS_CLI_ENV = cli_env_defaults_applied
+
 try:
     import decky  # type: ignore
 except ModuleNotFoundError:
+    IS_CLI_ENV = True
     logging.basicConfig(level=logging.INFO)
 
     class _DummyLogger:
@@ -92,13 +115,15 @@ except ModuleNotFoundError:
             self._write()
 
 # Determine script path
-script_directory = os.path.dirname(os.path.abspath(__file__))
-
 # Get environment variables with CLI-friendly defaults
 logDir = os.environ.get("DECKY_PLUGIN_LOG_DIR", os.path.join(script_directory, "tmp", "logs"))
 settingsDir = os.environ.get("DECKY_PLUGIN_SETTINGS_DIR", os.path.join(script_directory, "tmp", "config"))
 os.makedirs(logDir, exist_ok=True)
 os.makedirs(settingsDir, exist_ok=True)
+
+if IS_CLI_ENV:
+    log_path_hint = getattr(decky, "DECKY_PLUGIN_LOG", os.path.join(logDir, "decky.log"))
+    #print(f"[decky-virtual-surround-sound] Log file: {log_path_hint}")
 
 # Read settings
 settings = SettingsManager(name="settings", settings_directory=settingsDir)
@@ -109,6 +134,10 @@ hrir_directory = os.path.join(script_directory, "hrir-audio")
 default_hrir_file = "HRTF from Aureal Vortex 2 - WIP v2.wav"
 pipewire_config_path = os.path.join(os.path.expanduser("~"), ".config", "pipewire")
 hrir_dest_path = os.path.join(pipewire_config_path, "hrir.wav")
+
+VIRTUAL_SURROUND_FILTER_SINK_NODE = "input.virtual-surround-sound-filter"
+VIRTUAL_SURROUND_DEVICE_SINK_NODE = "input.virtual-surround-sound-input"
+VIRTUAL_SURROUND_FALLBACK_SINK_NODE = "input.virtual-sink"
 
 
 def subprocess_exec_env():
@@ -298,28 +327,36 @@ class Plugin:
     async def check_state(self):
         settings.read()
         enabled_apps = await self.get_enabled_apps_list()
-        sinks = await self.list_sinks()
+        sinks = await self.list_sinks() or []
         sink_inputs = await self.list_sink_inputs()
+        if not isinstance(sink_inputs, list):
+            sink_inputs = []
 
         # Find the sinks for "Virtual Surround Sound" and "Virtual Sink"
-        virtual_surround_sink = next((sink for sink in sinks if sink.get("name")
-                                     == "input.virtual-surround-sound"), None)
-        virtual_sink = next((sink for sink in sinks if sink.get("name") == "input.virtual-sink"), None)
-        if not virtual_surround_sink:
+        virtual_surround_filter_sink = next((sink for sink in sinks if sink.get("name")
+                                     == VIRTUAL_SURROUND_FILTER_SINK_NODE), None)
+        virtual_surround_device_sink = next((sink for sink in sinks if sink.get("name")
+                                             == VIRTUAL_SURROUND_DEVICE_SINK_NODE), None)
+        virtual_sink = next((sink for sink in sinks if sink.get("name") == VIRTUAL_SURROUND_FALLBACK_SINK_NODE), None)
+        if not virtual_surround_filter_sink:
             decky.logger.error("Required sink not found. Virtual Surround Sound is missing.")
             return
         if not virtual_sink:
             decky.logger.warning("Virtual Sink is missing. Will attempt to detect the current default sink instead.")
 
-        virtual_surround_object_id = self._object_id_from_sink(virtual_surround_sink)
-        virtual_surround_index = self._sink_index_from_entry(virtual_surround_sink)
+        virtual_surround_object_id = self._object_id_from_sink(virtual_surround_filter_sink)
+        virtual_surround_index = self._sink_index_from_entry(virtual_surround_filter_sink)
         if virtual_surround_object_id is None or virtual_surround_index is None:
             decky.logger.error("Virtual Surround Sound sink is missing required metadata.")
             return
+        virtual_surround_device_object_id = self._object_id_from_sink(virtual_surround_device_sink)
+        virtual_surround_device_index = self._sink_index_from_entry(virtual_surround_device_sink)
+        virtual_surround_target_index = virtual_surround_device_index if virtual_surround_device_index is not None else virtual_surround_index
 
         # Determine the default_sink_id and default_sink_index
         default_sink_id: int | None = None
         default_sink_index: int | None = None
+        default_sink_entry = virtual_sink
         if virtual_sink:
             default_sink_id = self._object_id_from_sink(virtual_sink)
             default_sink_index = self._sink_index_from_entry(virtual_sink)
@@ -327,6 +364,7 @@ class Plugin:
                 decky.logger.warning("Virtual Sink is missing metadata; unable to use as fallback.")
                 default_sink_id = None
                 default_sink_index = None
+                default_sink_entry = None
 
         if default_sink_id is None or default_sink_index is None:
             fallback_sink_id = await self.get_highest_priority_sink_id()
@@ -338,6 +376,7 @@ class Plugin:
                 if fallback_sink:
                     default_sink_id = self._object_id_from_sink(fallback_sink)
                     default_sink_index = self._sink_index_from_entry(fallback_sink)
+                    default_sink_entry = fallback_sink
                     decky.logger.info(
                         "Using highest priority sink (object %s, index %s).",
                         default_sink_id, default_sink_index
@@ -353,7 +392,10 @@ class Plugin:
         # Ensure that the "Virtual Surround Sound" is default
         use_surround_sink_as_default = await self.get_surround_sink_default()
         if use_surround_sink_as_default:
-            await self.set_default_sink(virtual_surround_object_id)
+            if virtual_surround_device_object_id is not None:
+                await self.set_default_sink(virtual_surround_device_object_id)
+            else:
+                decky.logger.warning("Virtual Surround Device sink id not resolved; cannot update default sink.")
         else:
             if default_sink_id is not None:
                 await self.set_default_sink(default_sink_id)
@@ -361,6 +403,11 @@ class Plugin:
                 decky.logger.warning("Default sink id not resolved; cannot update default sink.")
 
         # Loop over each sink input and check its assignment.
+        surround_sink_indices: set[int] = set()
+        if virtual_surround_index is not None:
+            surround_sink_indices.add(virtual_surround_index)
+        if virtual_surround_device_index is not None:
+            surround_sink_indices.add(virtual_surround_device_index)
         for sink_input in sink_inputs:
             target_object = self._sink_input_target_object(sink_input)
             if target_object.strip():
@@ -374,16 +421,22 @@ class Plugin:
             # If the app is in the enabled_apps list,
             # it should be assigned to the Virtual Surround Sound sink.
             if app_name in enabled_apps:
-                if current_sink_index and current_sink_index != virtual_surround_index:
+                if virtual_surround_target_index is None:
+                    decky.logger.warning(
+                        "Unable to assign %s to Virtual Surround Sound: sink index unavailable.",
+                        app_name,
+                    )
+                    continue
+                if current_sink_index != virtual_surround_target_index:
                     decky.logger.info(
                         "Moving %s (sink input %s) to Virtual Surround Sound (sink %s)",
-                        app_name, sink_input['index'], virtual_surround_index
+                        app_name, sink_input['index'], virtual_surround_target_index
                     )
-                    await self.set_sink_for_application(sink_input['index'], virtual_surround_index)
+                    await self.set_sink_for_application(sink_input['index'], virtual_surround_target_index)
             else:
                 # If the app is not enabled but is currently assigned to the Virtual Surround Sound sink,
                 # move it to the Virtual Sink.
-                if current_sink_index and current_sink_index == virtual_surround_index:
+                if current_sink_index in surround_sink_indices:
                     if default_sink_index is None:
                         decky.logger.warning(
                             "Default sink index unresolved; cannot move %s to fallback sink.", app_name
@@ -675,6 +728,13 @@ class Plugin:
             return [part.strip() for part in channel_map.split(",") if part.strip()]
         return []
 
+    @staticmethod
+    def _sink_display_name(sink_entry: dict | None) -> str:
+        if not sink_entry:
+            return "unknown sink"
+        props = sink_entry.get("properties") or {}
+        return props.get("node.description") or sink_entry.get("description") or sink_entry.get("name") or "unknown sink"
+
     async def get_highest_priority_sink_id(self) -> int | None:
         """
         Returns the object ID of the sink with the highest priority.session value.
@@ -893,8 +953,20 @@ class Plugin:
                 stderr=asyncio.subprocess.PIPE,
                 env=subprocess_exec_env()
             )
-            await process.communicate()
-            return process.returncode == 0
+            stdout, stderr = await process.communicate()
+            if process.returncode != 0:
+                decky.logger.error(
+                    "Failed to set default sink to %s: %s",
+                    sink_input_index,
+                    stderr.decode().strip(),
+                )
+                return False
+            decky.logger.info(
+                "Default sink set via wpctl to %s. %s",
+                sink_input_index,
+                stdout.decode().strip(),
+            )
+            return True
         except FileNotFoundError:
             decky.logger.warning("wpctl not found.")
             return False
@@ -957,7 +1029,7 @@ class Plugin:
         target_sink = None
         for sink in sinks:
             # Look for the sink named "input.virtual-surround-sound"
-            if sink.get("name") == "input.virtual-surround-sound":
+            if sink.get("name") == VIRTUAL_SURROUND_FILTER_SINK_NODE:
                 target_sink = sink
                 break
         if target_sink is None:
@@ -1077,6 +1149,101 @@ class CLIHelper:
     def close(self):
         self.loop.close()
 
+    def lines_for_sinks(self, plugin: Plugin) -> list[str]:
+        sinks = self.run(plugin.list_sinks()) or []
+        lines: list[str] = []
+        if not sinks:
+            lines.append("No sinks found.")
+            return lines
+        for idx, sink in enumerate(sinks, start=1):
+            sink_index = plugin._sink_index_from_entry(sink)
+            object_id = plugin._object_id_from_sink(sink)
+            description = sink.get("description") or "No description"
+            lines.append(f"{idx}. {sink.get('name')} (index={sink_index if sink_index is not None else 'unknown'})")
+            lines.append(f"    object_id: {object_id if object_id is not None else 'unknown'}")
+            lines.append(f"    description: {description}")
+            props = sink.get("properties") or {}
+            priority = props.get("priority.session")
+            if priority is not None:
+                lines.append(f"    priority.session: {priority}")
+            channels = plugin._channel_map_from_sink(sink)
+            if channels:
+                lines.append(f"    channels: {', '.join(channels)}")
+        return lines
+
+    def lines_for_running_apps(self, plugin: Plugin) -> list[str]:
+        sink_inputs = self.run(plugin.list_sink_inputs()) or []
+        lines: list[str] = []
+        if not sink_inputs:
+            lines.append("No running apps detected.")
+            return lines
+        for idx, entry in enumerate(sink_inputs, start=1):
+            name = entry.get("name") or plugin._sink_input_app_name(entry) or f"Sink Input {entry.get('index')}"
+            lines.append(f"{idx}. {name}")
+            lines.append(f"    index: {entry.get('index')} -> sink {entry.get('sink')}")
+            target = entry.get("target_object") or plugin._sink_input_target_object(entry)
+            if target:
+                lines.append(f"    target: {target}")
+            volume_desc = entry.get("volume") or plugin._sink_input_volume_description(entry)
+            if volume_desc:
+                lines.append(f"    volume: {volume_desc}")
+            format_value = entry.get("format")
+            if isinstance(format_value, dict):
+                fmt_parts = []
+                if format_value.get("format"):
+                    fmt_parts.append(f"type={format_value['format']}")
+                if format_value.get("sample_format"):
+                    fmt_parts.append(f"sample={format_value['sample_format']}")
+                if format_value.get("rate"):
+                    fmt_parts.append(f"rate={format_value['rate']}")
+                if format_value.get("channels"):
+                    fmt_parts.append(f"channels={format_value['channels']}")
+                if fmt_parts:
+                    lines.append(f"    format: {', '.join(fmt_parts)}")
+                channel_map = format_value.get("channel_map") or []
+                if channel_map:
+                    lines.append(f"    channel_map: {', '.join(channel_map)}")
+        return lines
+
+    def lines_for_highest_priority_sink(self, plugin: Plugin) -> list[str]:
+        sink_id = self.run(plugin.get_highest_priority_sink_id())
+        if sink_id is None:
+            return ["Unable to determine a highest priority sink."]
+        sinks = self.run(plugin.list_sinks()) or []
+        entry = next((s for s in sinks if plugin._object_id_from_sink(s) == sink_id), None)
+        lines = [f"Object ID: {sink_id}"]
+        if entry:
+            lines.append(f"Name: {entry.get('name')}")
+            lines.append(f"Index: {plugin._sink_index_from_entry(entry)}")
+            lines.append(f"Description: {entry.get('description')}")
+            props = entry.get("properties") or {}
+            priority = props.get("priority.session")
+            if priority is not None:
+                lines.append(f"priority.session: {priority}")
+        return lines
+
+    def lines_for_default_sink(self, plugin: Plugin) -> list[str]:
+        sink_id = self.run(plugin.get_default_sink_id())
+        if sink_id is None:
+            return ["Unable to determine default sink."]
+        sinks = self.run(plugin.list_sinks()) or []
+        entry = next((s for s in sinks if plugin._object_id_from_sink(s) == sink_id), None)
+        lines = [f"Object ID: {sink_id}"]
+        if entry:
+            lines.append(f"Name: {entry.get('name')}")
+            lines.append(f"Index: {plugin._sink_index_from_entry(entry)}")
+            lines.append(f"Description: {entry.get('description')}")
+            props = entry.get("properties") or {}
+            priority = props.get("priority.session")
+        if priority is not None:
+            lines.append(f"priority.session: {priority}")
+        return lines
+
+    @staticmethod
+    def print_lines(lines: list[str]) -> None:
+        for line in lines:
+            print(line)
+
 
 class CLIMenu:
     """Curses-driven CLI for interacting with Plugin helpers."""
@@ -1195,92 +1362,19 @@ class CLIMenu:
         self._show_scrollable_text(stdscr, title, [message])
 
     def list_sinks_action(self, stdscr):
-        sinks = self.helper.run(self.plugin.list_sinks())
-        lines: list[str] = []
-        if not sinks:
-            lines.append("No sinks found.")
-        else:
-            for idx, sink in enumerate(sinks, start=1):
-                sink_index = self.plugin._sink_index_from_entry(sink)
-                object_id = self.plugin._object_id_from_sink(sink)
-                description = sink.get("description") or "No description"
-                lines.append(f"{idx}. {sink.get('name')} (index={sink_index if sink_index is not None else 'unknown'})")
-                lines.append(f"    object_id: {object_id if object_id is not None else 'unknown'}")
-                lines.append(f"    description: {description}")
-                props = sink.get("properties") or {}
-                priority = props.get("priority.session")
-                if priority is not None:
-                    lines.append(f"    priority.session: {priority}")
-                channels = self.plugin._channel_map_from_sink(sink)
-                if channels:
-                    lines.append(f"    channels: {', '.join(channels)}")
+        lines = self.helper.lines_for_sinks(self.plugin)
         self._show_scrollable_text(stdscr, "Available Sinks", lines)
 
     def list_sink_inputs_action(self, stdscr):
-        sink_inputs = self.helper.run(self.plugin.list_sink_inputs())
-        lines: list[str] = []
-        if not sink_inputs:
-            lines.append("No running apps detected.")
-        else:
-            for idx, entry in enumerate(sink_inputs, start=1):
-                name = entry.get("name") or self.plugin._sink_input_app_name(
-                    entry) or f"Sink Input {entry.get('index')}"
-                lines.append(f"{idx}. {name}")
-                lines.append(f"    index: {entry.get('index')} -> sink {entry.get('sink')}")
-                target = entry.get("target_object") or self.plugin._sink_input_target_object(entry)
-                if target:
-                    lines.append(f"    target: {target}")
-                volume_desc = entry.get("volume") or self.plugin._sink_input_volume_description(entry)
-                if volume_desc:
-                    lines.append(f"    volume: {volume_desc}")
-                format_value = entry.get("format")
-                if isinstance(format_value, dict):
-                    fmt_parts = []
-                    if format_value.get("format"):
-                        fmt_parts.append(f"type={format_value['format']}")
-                    if format_value.get("sample_format"):
-                        fmt_parts.append(f"sample={format_value['sample_format']}")
-                    if format_value.get("rate"):
-                        fmt_parts.append(f"rate={format_value['rate']}")
-                    if format_value.get("channels"):
-                        fmt_parts.append(f"channels={format_value['channels']}")
-                    if fmt_parts:
-                        lines.append(f"    format: {', '.join(fmt_parts)}")
-                    channel_map = format_value.get("channel_map") or []
-                    if channel_map:
-                        lines.append(f"    channel_map: {', '.join(channel_map)}")
+        lines = self.helper.lines_for_running_apps(self.plugin)
         self._show_scrollable_text(stdscr, "Running Apps (Sink Inputs)", lines)
 
     def highest_priority_sink_action(self, stdscr):
-        sink_id = self.helper.run(self.plugin.get_highest_priority_sink_id())
-        if sink_id is None:
-            self._show_message(stdscr, "Highest Priority Sink", "Unable to determine a highest priority sink.")
-            return
-        sinks = self.helper.run(self.plugin.list_sinks())
-        entry = next((s for s in sinks if self.plugin._object_id_from_sink(s) == sink_id), None)
-        lines = [f"Object ID: {sink_id}"]
-        if entry:
-            lines.append(f"Name: {entry.get('name')}")
-            lines.append(f"Index: {self.plugin._sink_index_from_entry(entry)}")
-            lines.append(f"Description: {entry.get('description')}")
-            props = entry.get("properties") or {}
-            priority = props.get("priority.session")
-            if priority is not None:
-                lines.append(f"priority.session: {priority}")
+        lines = self.helper.lines_for_highest_priority_sink(self.plugin)
         self._show_scrollable_text(stdscr, "Highest Priority Sink", lines)
 
     def default_sink_action(self, stdscr):
-        sink_id = self.helper.run(self.plugin.get_default_sink_id())
-        if sink_id is None:
-            self._show_message(stdscr, "Default Sink", "Unable to determine default sink.")
-            return
-        sinks = self.helper.run(self.plugin.list_sinks())
-        entry = next((s for s in sinks if self.plugin._object_id_from_sink(s) == sink_id), None)
-        lines = [f"Object ID: {sink_id}"]
-        if entry:
-            lines.append(f"Name: {entry.get('name')}")
-            lines.append(f"Index: {self.plugin._sink_index_from_entry(entry)}")
-            lines.append(f"Description: {entry.get('description')}")
+        lines = self.helper.lines_for_default_sink(self.plugin)
         self._show_scrollable_text(stdscr, "Default Sink", lines)
 
     def toggle_app_virtual_surround_action(self, stdscr):
@@ -1432,6 +1526,54 @@ class CLIMenu:
 
 
 if __name__ == '__main__':
+    parser = argparse.ArgumentParser(description="Decky Virtual Surround Sound CLI")
+    parser.add_argument("--menu", action="store_true", help="Launch the curses menu UI")
+    parser.add_argument("--list-sinks", action="store_true", help="List available sinks")
+    parser.add_argument("--list-running-apps", action="store_true", help="List sink inputs (running apps)")
+    parser.add_argument("--print-highest-priority-sink", action="store_true", help="Print highest priority physical sink")
+    parser.add_argument("--print-default-sink", action="store_true", help="Print current default sink")
+    args = parser.parse_args()
+
+    actions_requested = any([
+        args.list_sinks,
+        args.list_running_apps,
+        args.print_highest_priority_sink,
+        args.print_default_sink,
+    ])
+
+    if args.menu and actions_requested:
+        parser.error("--menu cannot be combined with other options")
+
+    if args.menu or not actions_requested:
+        plugin = Plugin()
+        menu = CLIMenu(plugin)
+        menu.run()
+        sys.exit(0)
+
     plugin = Plugin()
-    menu = CLIMenu(plugin)
-    menu.run()
+    helper = CLIHelper()
+    exit_code = 0
+    try:
+        if args.list_sinks:
+            lines = helper.lines_for_sinks(plugin)
+            helper.print_lines(lines)
+            if lines[:1] == ["No sinks found."]:
+                exit_code |= 1
+        if args.list_running_apps:
+            lines = helper.lines_for_running_apps(plugin)
+            helper.print_lines(lines)
+            if lines[:1] == ["No running apps detected."]:
+                exit_code |= 1
+        if args.print_highest_priority_sink:
+            lines = helper.lines_for_highest_priority_sink(plugin)
+            helper.print_lines(lines)
+            if lines[:1] == ["Unable to determine a highest priority sink."]:
+                exit_code |= 1
+        if args.print_default_sink:
+            lines = helper.lines_for_default_sink(plugin)
+            helper.print_lines(lines)
+            if lines[:1] == ["Unable to determine default sink."]:
+                exit_code |= 1
+    finally:
+        helper.close()
+    sys.exit(exit_code)
