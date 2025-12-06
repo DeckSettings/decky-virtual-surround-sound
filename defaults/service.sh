@@ -447,6 +447,15 @@ EOF
 virtual_surround_filter_sink_pw_cli_pid=""
 virtual_surround_device_sink_pw_cli_pid=""
 
+reset_default_sink() {
+    local default_id=""
+    default_id=$(wpctl status | awk '/\*/ && /Audio\/Sink/ {if (match($0,/[0-9]+\./,m)) {print substr(m[0], 1, length(m[0])-1); exit}}')
+    if [[ -n "${default_id}" ]]; then
+        wpctl set-default "${default_id}" >/dev/null 2>&1 || true
+        wpctl clear-default
+    fi
+}
+
 cleanup_virtual_surround_module() {
     local running_pid=""
     local terminated=""
@@ -469,13 +478,6 @@ cleanup_virtual_surround_module() {
     virtual_surround_filter_sink_pw_cli_pid=""
 }
 
-reset_default_sink() {
-    local default_id=""
-    default_id=$(wpctl status | awk '/\*/ && /Audio\/Sink/ {if (match($0,/[0-9]+\./,m)) {print substr(m[0], 1, length(m[0])-1); exit}}')
-    if [[ -n "${default_id}" ]]; then
-        wpctl set-default "${default_id}" >/dev/null 2>&1 || true
-    fi
-}
 create_virtual_surround_module() {
     local channel_count="$1"
     local module_args="${filter_module_args_8}"
@@ -497,6 +499,7 @@ create_virtual_surround_module() {
         return 1
     fi
 
+    echo "Created filter-chain sink '${virtual_surround_filter_sink_name:?}' (pid ${virtual_surround_filter_sink_pw_cli_pid:?})"
     return 0
 }
 
@@ -528,12 +531,14 @@ create_virtual_surround_default_sink() {
     if [[ "${channel_count}" == "6" ]]; then
         module_args="${device_module_args_6}"
     fi
+
     cleanup_virtual_surround_default_sink
 
+    echo "Creating and loading module libpipewire-module-filter-chain with ${channel_count:?} channels - ${virtual_surround_device_sink_name:?}"
     pw-cli -m load-module libpipewire-module-filter-chain "${module_args:?}" &
     virtual_surround_device_sink_pw_cli_pid=$!
     echo "${virtual_surround_device_sink_pw_cli_pid:?}" >"${device_module_pid_file:?}"
-    sleep 1
+    sleep 1 # <- sleep for a second to ensure everything is loaded before linking
 
     if ! wait_for_sink_registration "${virtual_surround_device_sink_name:?}" 40 0.25; then
         echo "ERROR! Unable to detect sink '${virtual_surround_device_sink_name:?}' after loading module."
@@ -545,6 +550,48 @@ create_virtual_surround_default_sink() {
     return 0
 }
 
+link_ports() {
+    local output_port="$1"
+    local input_port="$2"
+    local result
+    local existing_inputs
+    existing_inputs=$(pw-link -l 2>/dev/null | awk -v target="${output_port}" '
+        BEGIN {record = 0}
+        {
+            line = $0
+            gsub(/^[[:space:]]+|[[:space:]]+$/, "", line)
+            if (line == target) {
+                record = 1
+                next
+            }
+            if (record) {
+                if (line ~ /^\|[-<]>/) {
+                    sub(/^\|[-<]>[[:space:]]*/, "", line)
+                    print line
+                    next
+                }
+                if (line !~ /^\|/) {
+                    record = 0
+                }
+            }
+        }
+    ')
+    for existing in ${existing_inputs}; do
+        if [[ -n "${existing}" && "${existing}" != "${input_port}" ]]; then
+            pw-link -d "${output_port}" "${existing}" >/dev/null 2>&1 || true
+        fi
+    done
+    if result=$(pw-link -w "${output_port}" "${input_port}" 2>&1); then
+        echo "Linking ${output_port} -> ${input_port}"
+        return 0
+    fi
+    if printf '%s\n' "${result}" | grep -qi 'file exists'; then
+        return 0
+    fi
+    echo "Failed to link ${output_port} -> ${input_port}: ${result}"
+    return 1
+}
+
 link_virtual_surround_chain() {
     local channel_count="$1"
     local -a channels
@@ -553,20 +600,93 @@ link_virtual_surround_chain() {
     else
         channels=(FL FR FC LFE RL RR SL SR)
     fi
-    local default_output_prefix="output.${virtual_surround_device_sink_node}:output_"
-    local default_input_prefix="input.${virtual_surround_device_sink_node}:playback_"
-    local surround_input_prefix="input.${virtual_surround_filter_sink_node}:playback_"
-    local surround_output_prefix="output.${virtual_surround_filter_sink_node}:output_"
+
+    local device_node="${virtual_surround_device_sink_node}"
+    local filter_node="${virtual_surround_filter_sink_node}"
+    device_node="${device_node#input.}"
+    device_node="${device_node#output.}"
+    filter_node="${filter_node#input.}"
+    filter_node="${filter_node#output.}"
+    local default_output_prefix="output.${device_node}:output_"
+    local surround_input_prefix="input.${filter_node}:playback_"
+    local surround_output_prefix="output.${filter_node}:output_"
+
+    local default_sink_name
+    default_sink_name=$(wpctl status | awk '/\*/ && /Audio\/Sink/ { sub(/.*\*\s*[0-9]+\.\s*/, ""); sub(/\s*\[.*/, ""); print; exit }' | sed 's/[[:space:]]*$//')
+    local virtual_filter="${virtual_surround_filter_sink_name:?}"
+    local virtual_device="${virtual_surround_device_sink_name:?}"
+
+    if [[ -n "${default_sink_name}" && ("${default_sink_name}" == "${virtual_filter}" || "${default_sink_name}" == "${virtual_device}") ]]; then
+        if ! command -v python3 >/dev/null 2>&1; then
+            echo "Unable to find python to determine the highest priority sink."
+            return 1
+        fi
+        local fallback_output=""
+        pushd "${script_directory:?}" >/dev/null
+        fallback_output=$(python3 ./main.py --print-highest-priority-sink 2>/dev/null || true)
+        popd >/dev/null
+        local fallback_object_name
+        fallback_object_name=$(printf "%s\n" "${fallback_output}" | awk -F': ' '/^Name:/ {print $2; exit}')
+        if [[ -z "${fallback_object_name:-}" ]]; then
+            echo "Unable to determine fallback sink name."
+            return 1
+        fi
+        default_sink_name="${fallback_object_name:?}"
+        #local fallback_object_id
+        #fallback_object_id=$(printf "%s\n" "${fallback_output}" | awk -F': ' '/^Object ID:/ {print $2; exit}')
+        #if [[ -z "${fallback_object_id}" ]]; then
+        #    echo "Unable to determine fallback sink object ID."
+        #    return 1
+        #fi
+        #echo "Default sink is virtual; switching to highest priority sink object ${fallback_object_id}"
+        #wpctl set-default "${fallback_object_id}" >/dev/null 2>&1 || true
+        #default_sink_name=$(wpctl status | awk '/\*/ && /Audio\/Sink/ { sub(/.*\*\s*[0-9]+\.\s*/, ""); sub(/\s*\[.*/, ""); print; exit }' | sed 's/[[:space:]]*$//')
+    fi
+
+    if [[ -z "${default_sink_name}" || "${default_sink_name}" == "${virtual_filter}" || "${default_sink_name}" == "${virtual_device}" ]]; then
+        echo "Unable to detect a valid target output sink"
+        return 1
+    fi
+
+    local output_ports
+    local input_ports
+    output_ports=$(pw-link -o 2>/dev/null | sed 's/[[:space:]]*$//')
+    input_ports=$(pw-link -i 2>/dev/null | sed 's/[[:space:]]*$//')
 
     for ch in "${channels[@]}"; do
-        local default_output_port="${default_output_prefix}${ch}"
+        local device_output_port="${default_output_prefix}${ch}"
         local surround_input_port="${surround_input_prefix}${ch}"
-        local default_input_port="${default_input_prefix}${ch}"
-        local surround_output_port="${surround_output_prefix}${ch}"
 
-        pw-link --disconnect "${default_output_port}" "${surround_input_port}" >/dev/null 2>&1 || true
-        pw-link --disconnect "${surround_output_port}" "${default_input_port}" >/dev/null 2>&1 || true
-        if ! pw-link "${default_output_port}" "${surround_input_port}"; then
+        if ! grep -Fxq -- "${device_output_port}" <<<"${output_ports}"; then
+            echo "Skipping ${device_output_port} -> ${surround_input_port}: device output port missing"
+            continue
+        fi
+        if ! grep -Fxq -- "${surround_input_port}" <<<"${input_ports}"; then
+            echo "Skipping ${device_output_port} -> ${surround_input_port}: filter input port missing"
+            continue
+        fi
+
+        if ! link_ports "${device_output_port}" "${surround_input_port}"; then
+            return 1
+        fi
+    done
+
+    local target_input_prefix="${default_sink_name}:playback_"
+    local target_channels=(FL FR)
+    for ch in "${target_channels[@]}"; do
+        local surround_output_port="${surround_output_prefix}${ch}"
+        local target_input_port="${target_input_prefix}${ch}"
+
+        if ! grep -Fxq -- "${surround_output_port}" <<<"${output_ports}"; then
+            echo "Skipping ${surround_output_port} -> ${target_input_port}: filter output port missing"
+            continue
+        fi
+        if ! grep -Fxq -- "${target_input_port}" <<<"${input_ports}"; then
+            echo "Skipping ${surround_output_port} -> ${target_input_port}: target sink input port missing"
+            continue
+        fi
+        if ! link_ports "${surround_output_port}" "${target_input_port}"; then
+            echo "Failed"
             return 1
         fi
     done
@@ -594,6 +714,11 @@ kill_all_running_instances() {
     if [ -n "${running_pids}" ]; then
         kill -TERM ${running_pids}
     fi
+}
+
+is_pid_running() {
+    local pid="$1"
+    [[ -n "${pid}" ]] && kill -0 "${pid}" >/dev/null 2>&1
 }
 
 run() {
@@ -634,41 +759,25 @@ run() {
         exit 1
     fi
 
-    if ! link_virtual_surround_chain "${channels:?}"; then
-        echo "Failed to rewire virtual surround nodes"
-        _term
-        exit 1
-    fi
+    local linking_failed=0
+    while true; do
+        if ! is_pid_running "${virtual_surround_filter_sink_pw_cli_pid}" || ! is_pid_running "${virtual_surround_device_sink_pw_cli_pid}"; then
+            break
+        fi
+        sleep 1
+        if ! link_virtual_surround_chain "${channels:?}"; then
+            linking_failed=1
+            break
+        fi
+    done
 
-    # # Set this as the default sink
-    # wpctl set-default $(wpctl status | grep 'input.virtual-surround-sound' | grep 'Audio/Sink' | sed 's/[^0-9]*\([0-9]\+\)\..*/\1/')
-    # wpctl set-default $(wpctl status | grep 'Audio/Sink' | grep -v 'virtual' | head -n1 | sed 's/[^0-9]*\([0-9]\+\)\..*/\1/')
-
-    ## # Configure loaded module
-    ## #   NOTE:
-    ## #       The available outputs and inputs are found by running 'pw-link -o' and 'pw-link -i'
-    ## echo "Link outputs of module libpipewire-module-filter-chain - ${virtual_surround_filter_sink_node:?} to module ${virtual_dummy_sink_node:?}"
-    ## virtual_surround_sink_outputs_prefix="output.${virtual_surround_filter_sink_node:?}:output_"
-    ## virtual_sink_inputs_prefix="${virtual_dummy_sink_name:?}:playback_"
-    ## for ch in FL FR; do
-    ##     local output="${virtual_surround_sink_outputs_prefix:?}${ch:?}"
-    ##     local input="${virtual_sink_inputs_prefix:?}${ch:?}"
-    ##     # Attempt to disconnect the link; ignore any errors.
-    ##     pw-link --disconnect "${output:?}" "${input:?}" >/dev/null 2>&1 || true
-    ##     # Now (re)connect the link.
-    ##     echo "${output:?} -> ${input:?}"
-    ##     if ! pw-link "${output:?}" "${input:?}"; then
-    ##         _term
-    ##         echo "An error occured when linking nodes. Unable to proceed. Exit!"
-    ##         exit 2
-    ##     fi
-    ## done
-
-    # Wait for child process to exit:
-    echo "Waiting for PID '${virtual_surround_filter_sink_pw_cli_pid}' to exit"
-    wait "$virtual_surround_filter_sink_pw_cli_pid"
     cleanup_virtual_surround_default_sink
     cleanup_virtual_surround_module
+
+    if [[ "${linking_failed}" -ne 0 ]]; then
+        echo "Failed to rewire virtual surround nodes"
+        exit 1
+    fi
 
     echo "DONE"
 }
