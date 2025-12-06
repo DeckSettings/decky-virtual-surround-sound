@@ -21,7 +21,6 @@ _handle_signal() {
     _term
     exit 1
 }
-trap '_handle_signal' INT QUIT HUP TERM ERR
 
 mix_gain_db="-6dB"
 
@@ -662,6 +661,23 @@ wait_for_sink_registration() {
     return 1
 }
 
+virtual_surround_sinks_exist() {
+    local sink_list
+    if ! sink_list=$(pactl list short sinks 2>/dev/null | cut -f2); then
+        return 1
+    fi
+
+    if ! grep -Fxq -- "${virtual_surround_filter_sink_name:?}" <<<"${sink_list}"; then
+        return 1
+    fi
+
+    if ! grep -Fxq -- "${virtual_surround_device_sink_name:?}" <<<"${sink_list}"; then
+        return 1
+    fi
+
+    return 0
+}
+
 kill_all_running_instances() {
     cleanup_virtual_surround_module
     cleanup_virtual_surround_default_sink
@@ -677,6 +693,7 @@ is_pid_running() {
 }
 
 run() {
+    trap '_handle_signal' INT QUIT HUP TERM ERR
     echo "Running service"
     local filter_type="convolver"
     while [[ $# -gt 0 ]]; do
@@ -717,10 +734,15 @@ run() {
 
     local linking_failed=0
     while true; do
+        sleep 1
         if ! is_pid_running "${virtual_surround_filter_sink_pw_cli_pid}" || ! is_pid_running "${virtual_surround_device_sink_pw_cli_pid}"; then
             break
         fi
-        sleep 1
+        if ! virtual_surround_sinks_exist; then
+            echo "Virtual surround sinks are no longer available"
+            linking_failed=1
+            break
+        fi
         if ! link_virtual_surround_chain "${channels:?}"; then
             linking_failed=1
             break
@@ -740,15 +762,15 @@ run() {
 
 speaker_test() {
     echo "Running sound test"
-    local pulse_sink="${virtual_surround_filter_sink_node:?}"
+    local pulse_sink_name="${virtual_surround_filter_sink_name:?}"
     while [[ $# -gt 0 ]]; do
         case "$1" in
         --sink=*)
-            pulse_sink="${1#*=}"
+            pulse_sink_name="${1#*=}"
             ;;
         --sink)
             shift
-            pulse_sink="$1"
+            pulse_sink_name="$1"
             ;;
         *)
             echo "Invalid arg: $1"
@@ -757,15 +779,11 @@ speaker_test() {
         esac
         shift
     done
-    if [[ "$pulse_sink" != "${virtual_surround_filter_sink_node:?}" ]]; then
-        echo "Select sink: $pulse_sink. Must be ${virtual_surround_filter_sink_node:?}."
-        exit 1
-    fi
 
     for i in {0..6}; do
-        speaker-test -D "pulse:input.${pulse_sink:?}" -c 8 -t wave -s $((i + 1))
+        speaker-test -D "pulse:${pulse_sink_name:?}" -c 8 -t wave -s $((i + 1))
     done
-    speaker-test -D "pulse:input.${pulse_sink:?}" -c 8 -t sine -f 50 -s 8
+    speaker-test -D "pulse:${pulse_sink_name:?}" -c 8 -t sine -f 50 -s 8
 }
 
 install_service() {

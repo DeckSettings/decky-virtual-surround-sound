@@ -123,7 +123,7 @@ os.makedirs(settingsDir, exist_ok=True)
 
 if IS_CLI_ENV:
     log_path_hint = getattr(decky, "DECKY_PLUGIN_LOG", os.path.join(logDir, "decky.log"))
-    #print(f"[decky-virtual-surround-sound] Log file: {log_path_hint}")
+    # print(f"[decky-virtual-surround-sound] Log file: {log_path_hint}")
 
 # Read settings
 settings = SettingsManager(name="settings", settings_directory=settingsDir)
@@ -336,7 +336,7 @@ class Plugin:
 
         # Find the sinks for "Virtual Surround Sound" and "Virtual Sink"
         virtual_surround_filter_sink = next((sink for sink in sinks if sink.get("name")
-                                     == VIRTUAL_SURROUND_FILTER_SINK_NODE), None)
+                                             == VIRTUAL_SURROUND_FILTER_SINK_NODE), None)
         virtual_surround_device_sink = next((sink for sink in sinks if sink.get("name")
                                              == VIRTUAL_SURROUND_DEVICE_SINK_NODE), None)
         virtual_sink = next((sink for sink in sinks if sink.get("name") == VIRTUAL_SURROUND_FALLBACK_SINK_NODE), None)
@@ -556,7 +556,17 @@ class Plugin:
 
     async def run_sound_test(self, sink: str):
         """Run a surround sound test using the sink specified"""
-        await service_script_exec("speaker-test", ["--sink", sink])
+        sink_name = sink
+        if sink == "default":
+            fallback_sink_id = await self.get_highest_priority_sink_id()
+            if fallback_sink_id is not None:
+                sinks = await self.list_sinks() or []
+                fallback_sink = next(
+                    (sink for sink in sinks if self._object_id_from_sink(sink) == fallback_sink_id),
+                    None
+                )
+                sink_name = fallback_sink.get("name")
+        await service_script_exec("speaker-test", ["--sink", sink_name])
 
     @staticmethod
     def _sink_input_properties(sink_input: dict | None) -> dict:
@@ -1427,7 +1437,8 @@ class CLIMenu:
         grouped: dict[str, list[dict]] = {}
         canonical_for_name: dict[str, str] = {}
         for entry in sink_inputs:
-            display_name = entry.get("name") or self.plugin._sink_input_app_name(entry) or f"Sink Input {entry.get('index')}"
+            display_name = entry.get("name") or self.plugin._sink_input_app_name(
+                entry) or f"Sink Input {entry.get('index')}"
             canonical_name = self.plugin._sink_input_app_name(entry) or display_name
             canonical_for_name.setdefault(display_name, canonical_name)
             grouped.setdefault(display_name, []).append(entry)
@@ -1628,7 +1639,8 @@ if __name__ == '__main__':
     parser.add_argument("--menu", action="store_true", help="Launch the curses menu UI")
     parser.add_argument("--list-sinks", action="store_true", help="List available sinks")
     parser.add_argument("--list-running-apps", action="store_true", help="List sink inputs (running apps)")
-    parser.add_argument("--print-highest-priority-sink", action="store_true", help="Print highest priority physical sink")
+    parser.add_argument("--print-highest-priority-sink", action="store_true",
+                        help="Print highest priority physical sink")
     parser.add_argument("--print-default-sink", action="store_true", help="Print current default sink")
     args = parser.parse_args()
 

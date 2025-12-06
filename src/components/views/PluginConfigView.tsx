@@ -94,7 +94,7 @@ const PluginConfigView: React.FC<PluginConfigViewProps> = ({ onGoBack }) => {
   }
 
   const runSoundTest = async (sink: string) => {
-    console.info(`[decky-virtual-surround-sound:PluginConfigView] Exec sound test`)
+    console.info(`[decky-virtual-surround-sound:PluginConfigView] Exec sound test on ${sink}`)
     await call<[original: string]>('run_sound_test', sink)
   }
 
@@ -208,13 +208,13 @@ const PluginConfigView: React.FC<PluginConfigViewProps> = ({ onGoBack }) => {
               </div>
               <DialogButton
                 style={{ margin: '5px' }}
-                onClick={() => runSoundTest('virtual-surround-sound')}
+                onClick={() => runSoundTest('virtual-surround-sound-filter')}
               >
                 <MdSurroundSound /> Surround Enabled
               </DialogButton>
               <DialogButton
                 style={{ margin: '5px' }}
-                onClick={() => runSoundTest('virtual-sink')}
+                onClick={() => runSoundTest('default')}
               >
                 <VscSurroundWith /> Surround Disabled
               </DialogButton>
