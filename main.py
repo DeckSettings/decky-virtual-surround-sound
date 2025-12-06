@@ -155,6 +155,7 @@ async def async_wait(evt: asyncio.Event, timeout: float) -> bool:
 
 class Plugin:
     IGNORED_APP_BINARIES = {"steamwebhelper"}
+
     def __init__(self):
         self._background_task = None
         self.stop_event = asyncio.Event()
@@ -301,7 +302,8 @@ class Plugin:
         sink_inputs = await self.list_sink_inputs()
 
         # Find the sinks for "Virtual Surround Sound" and "Virtual Sink"
-        virtual_surround_sink = next((sink for sink in sinks if sink.get("name") == "input.virtual-surround-sound"), None)
+        virtual_surround_sink = next((sink for sink in sinks if sink.get("name")
+                                     == "input.virtual-surround-sound"), None)
         virtual_sink = next((sink for sink in sinks if sink.get("name") == "input.virtual-sink"), None)
         if not virtual_surround_sink:
             decky.logger.error("Required sink not found. Virtual Surround Sound is missing.")
@@ -472,6 +474,14 @@ class Plugin:
             return props
         return {}
 
+    @staticmethod
+    def _clean_application_name(name_value) -> str | None:
+        if isinstance(name_value, str):
+            cleaned = name_value.strip()
+            if cleaned and cleaned.lower() != "(null)":
+                return cleaned
+        return None
+
     def _normalize_sink_input(self, sink_input: dict | None) -> dict | None:
         if not isinstance(sink_input, dict):
             return None
@@ -481,9 +491,9 @@ class Plugin:
         normalized = dict(sink_input)
         normalized["properties"] = props
         normalized["target_object"] = props.get("target.object", "")
-        app_name = props.get("application.name")
-        if isinstance(app_name, str) and app_name.strip():
-            normalized["name"] = app_name.strip()
+        app_name = self._clean_application_name(props.get("application.name"))
+        if app_name:
+            normalized["name"] = app_name
         normalized["format"] = self._parse_format_description(sink_input)
         normalized["volume"] = self._sink_input_volume_description(sink_input)
         return normalized
@@ -509,7 +519,8 @@ class Plugin:
         rate = self._extract_format_field(format_string, r'format\.rate\s*=\s*"((?:\\.|[^"])*)"')
         channels = self._extract_format_field(format_string, r'format\.channels\s*=\s*"((?:\\.|[^"])*)"')
         extracted_map = self._extract_format_field(format_string, r'format\.channel_map\s*=\s*"((?:\\.|[^"])*)"')
-        channel_map = self._parse_channel_map(extracted_map) if extracted_map else self._parse_channel_map(channel_map_value)
+        channel_map = self._parse_channel_map(
+            extracted_map) if extracted_map else self._parse_channel_map(channel_map_value)
 
         if sample_spec:
             if not sample_format:
@@ -566,8 +577,8 @@ class Plugin:
             return None
         if props.get("application.process.binary") == "steamwebhelper":
             return None
-        name = props.get("application.name")
-        if isinstance(name, str) and name.strip():
+        name = self._clean_application_name(props.get("application.name"))
+        if name:
             return name
         media_name = props.get("media.name")
         if isinstance(media_name, str) and media_name.strip():
@@ -595,6 +606,35 @@ class Plugin:
             if isinstance(percent, str) and percent:
                 entries.append(f"{channel}: {percent}")
         return ", ".join(entries)
+
+    def _parse_plain_sink_input_names(self, output: str) -> dict[int, str]:
+        names: dict[int, str] = {}
+        current_index: int | None = None
+        for raw_line in output.splitlines():
+            stripped = raw_line.strip()
+            if not stripped:
+                continue
+            index_match = re.match(r"Sink Input #(\d+)", stripped)
+            if index_match:
+                try:
+                    current_index = int(index_match.group(1))
+                except ValueError:
+                    current_index = None
+                continue
+            if current_index is None:
+                continue
+            app_match = re.match(r'application\.name\s*=\s*"([^"]*)"', stripped)
+            if app_match:
+                cleaned = self._clean_application_name(app_match.group(1))
+                if cleaned:
+                    names[current_index] = cleaned
+                continue
+            node_match = re.match(r'node\.name\s*=\s*"([^"]*)"', stripped)
+            if node_match and current_index not in names:
+                cleaned = self._clean_application_name(node_match.group(1))
+                if cleaned:
+                    names[current_index] = cleaned
+        return names
 
     @staticmethod
     def _parse_int(value, default: int = 0) -> int:
@@ -634,7 +674,7 @@ class Plugin:
         if isinstance(channel_map, str):
             return [part.strip() for part in channel_map.split(",") if part.strip()]
         return []
-        
+
     async def get_highest_priority_sink_id(self) -> int | None:
         """
         Returns the object ID of the sink with the highest priority.session value.
@@ -668,7 +708,7 @@ class Plugin:
             session_priority = self._parse_int(properties.get("priority.session"), -1)
 
             # Ensure sink has eligible port (Note: WirePlumber will consider ports that are marked as "unknown" as eligible for selection)
-            # Anything with an availablility "not available" on all ports should be considered of a low priority 
+            # Anything with an availablility "not available" on all ports should be considered of a low priority
             ports = sink.get("ports") or []
             effective_priority = session_priority
             if ports:
@@ -808,7 +848,35 @@ class Plugin:
                 normalized = self._normalize_sink_input(entry)
                 if normalized:
                     normalized_inputs.append(normalized)
-            return normalized_inputs
+            if normalized_inputs:
+                # NOTE: For some reason the JSON formatted output of pactl had decode errors for some app names.
+                #   I could not figure out how to fix that, so I am going to run it twice, the second time without JSON formatting.
+                #   Not ideal, but whatever.
+                process = await asyncio.create_subprocess_exec(
+                    'pactl', 'list', 'sink-inputs',
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.PIPE,
+                    env=subprocess_exec_env()
+                )
+                stdout, stderr = await process.communicate()
+                if process.returncode != 0:
+                    decky.logger.error("pactl list sink-inputs (text) failed: %s", stderr.decode().strip())
+                    name_map = {}
+                else:
+                    name_map = self._parse_plain_sink_input_names(stdout.decode())
+                    if name_map:
+                        for entry in normalized_inputs:
+                            sink_index = self._parse_int(entry.get("index"), -1)
+                            if sink_index < 0:
+                                continue
+                            new_name = self._clean_application_name(name_map.get(sink_index))
+                            if not new_name:
+                                continue
+                            existing = self._clean_application_name(entry.get("name"))
+                            if existing:
+                                continue
+                            entry["name"] = new_name
+                            return normalized_inputs
         except FileNotFoundError:
             decky.logger.error("pactl not found.")
             return []
@@ -868,7 +936,7 @@ class Plugin:
         """
         Sets per-channel volumes on the sink named "virtual-surround-sound"
         using the provided mixer_profile dict.
-        
+
         The mixer_profile is expected to be a dict like:
           {
             "name": "default",
@@ -1008,6 +1076,7 @@ class CLIHelper:
 
     def close(self):
         self.loop.close()
+
 
 class CLIMenu:
     """Curses-driven CLI for interacting with Plugin helpers."""
@@ -1154,7 +1223,8 @@ class CLIMenu:
             lines.append("No running apps detected.")
         else:
             for idx, entry in enumerate(sink_inputs, start=1):
-                name = entry.get("name") or self.plugin._sink_input_app_name(entry) or f"Sink Input {entry.get('index')}"
+                name = entry.get("name") or self.plugin._sink_input_app_name(
+                    entry) or f"Sink Input {entry.get('index')}"
                 lines.append(f"{idx}. {name}")
                 lines.append(f"    index: {entry.get('index')} -> sink {entry.get('sink')}")
                 target = entry.get("target_object") or self.plugin._sink_input_target_object(entry)

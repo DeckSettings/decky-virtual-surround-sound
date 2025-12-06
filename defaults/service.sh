@@ -77,6 +77,22 @@ context.modules = [
 EOF
 )
 
+mix_gain_db="-6dB"
+hrir_fl_left=0
+hrir_fl_right=1
+hrir_fr_left=8
+hrir_fr_right=7
+hrir_fc_left=6
+hrir_fc_right=13
+hrir_rl_left=4
+hrir_rl_right=5
+hrir_rr_left=12
+hrir_rr_right=11
+hrir_sl_left=2
+hrir_sl_right=3
+hrir_sr_left=10
+hrir_sr_right=9
+
 # 7.1
 args_8='{
     "audio.channels": 8,
@@ -93,22 +109,22 @@ args_8='{
             { "type": "builtin", "label": "copy", "name": "copySL" },
             { "type": "builtin", "label": "copy", "name": "copySR" },
             { "type": "builtin", "label": "copy", "name": "copyLFE" },
-            { "type": "builtin", "label": "convolver", "name": "convFL_L", "config": { "filename": "'${HOME:?}'/.config/pipewire/hrir.wav", "channel": 0 } },
-            { "type": "builtin", "label": "convolver", "name": "convFL_R", "config": { "filename": "'${HOME:?}'/.config/pipewire/hrir.wav", "channel": 1 } },
-            { "type": "builtin", "label": "convolver", "name": "convSL_L", "config": { "filename": "'${HOME:?}'/.config/pipewire/hrir.wav", "channel": 2 } },
-            { "type": "builtin", "label": "convolver", "name": "convSL_R", "config": { "filename": "'${HOME:?}'/.config/pipewire/hrir.wav", "channel": 3 } },
-            { "type": "builtin", "label": "convolver", "name": "convRL_L", "config": { "filename": "'${HOME:?}'/.config/pipewire/hrir.wav", "channel": 4 } },
-            { "type": "builtin", "label": "convolver", "name": "convRL_R", "config": { "filename": "'${HOME:?}'/.config/pipewire/hrir.wav", "channel": 5 } },
-            { "type": "builtin", "label": "convolver", "name": "convFC_L", "config": { "filename": "'${HOME:?}'/.config/pipewire/hrir.wav", "channel": 6 } },
-            { "type": "builtin", "label": "convolver", "name": "convFR_R", "config": { "filename": "'${HOME:?}'/.config/pipewire/hrir.wav", "channel": 7 } },
-            { "type": "builtin", "label": "convolver", "name": "convFR_L", "config": { "filename": "'${HOME:?}'/.config/pipewire/hrir.wav", "channel": 8 } },
-            { "type": "builtin", "label": "convolver", "name": "convSR_R", "config": { "filename": "'${HOME:?}'/.config/pipewire/hrir.wav", "channel": 9 } },
-            { "type": "builtin", "label": "convolver", "name": "convSR_L", "config": { "filename": "'${HOME:?}'/.config/pipewire/hrir.wav", "channel": 10 } },
-            { "type": "builtin", "label": "convolver", "name": "convRR_R", "config": { "filename": "'${HOME:?}'/.config/pipewire/hrir.wav", "channel": 11 } },
-            { "type": "builtin", "label": "convolver", "name": "convRR_L", "config": { "filename": "'${HOME:?}'/.config/pipewire/hrir.wav", "channel": 12 } },
-            { "type": "builtin", "label": "convolver", "name": "convFC_R", "config": { "filename": "'${HOME:?}'/.config/pipewire/hrir.wav", "channel": 13 } },
-            { "type": "builtin", "label": "convolver", "name": "convLFE_L", "config": { "filename": "'${HOME:?}'/.config/pipewire/hrir.wav", "channel": 6 } },
-            { "type": "builtin", "label": "convolver", "name": "convLFE_R", "config": { "filename": "'${HOME:?}'/.config/pipewire/hrir.wav", "channel": 13 } },
+            { "type": "builtin", "label": "convolver", "name": "convFL_L", "config": { "filename": "'${HOME:?}'/.config/pipewire/hrir.wav", "channel": '${hrir_fl_left:?}' } },
+            { "type": "builtin", "label": "convolver", "name": "convFL_R", "config": { "filename": "'${HOME:?}'/.config/pipewire/hrir.wav", "channel": '${hrir_fl_right:?}' } },
+            { "type": "builtin", "label": "convolver", "name": "convSL_L", "config": { "filename": "'${HOME:?}'/.config/pipewire/hrir.wav", "channel": '${hrir_sl_left:?}' } },
+            { "type": "builtin", "label": "convolver", "name": "convSL_R", "config": { "filename": "'${HOME:?}'/.config/pipewire/hrir.wav", "channel": '${hrir_sl_right:?}' } },
+            { "type": "builtin", "label": "convolver", "name": "convRL_L", "config": { "filename": "'${HOME:?}'/.config/pipewire/hrir.wav", "channel": '${hrir_rl_left:?}' } },
+            { "type": "builtin", "label": "convolver", "name": "convRL_R", "config": { "filename": "'${HOME:?}'/.config/pipewire/hrir.wav", "channel": '${hrir_rl_right:?}' } },
+            { "type": "builtin", "label": "convolver", "name": "convFC_L", "config": { "filename": "'${HOME:?}'/.config/pipewire/hrir.wav", "channel": '${hrir_fc_left:?}' } },
+            { "type": "builtin", "label": "convolver", "name": "convFR_R", "config": { "filename": "'${HOME:?}'/.config/pipewire/hrir.wav", "channel": '${hrir_fr_right:?}' } },
+            { "type": "builtin", "label": "convolver", "name": "convFR_L", "config": { "filename": "'${HOME:?}'/.config/pipewire/hrir.wav", "channel": '${hrir_fr_left:?}' } },
+            { "type": "builtin", "label": "convolver", "name": "convSR_R", "config": { "filename": "'${HOME:?}'/.config/pipewire/hrir.wav", "channel": '${hrir_sr_right:?}' } },
+            { "type": "builtin", "label": "convolver", "name": "convSR_L", "config": { "filename": "'${HOME:?}'/.config/pipewire/hrir.wav", "channel": '${hrir_sr_left:?}' } },
+            { "type": "builtin", "label": "convolver", "name": "convRR_R", "config": { "filename": "'${HOME:?}'/.config/pipewire/hrir.wav", "channel": '${hrir_rr_right:?}' } },
+            { "type": "builtin", "label": "convolver", "name": "convRR_L", "config": { "filename": "'${HOME:?}'/.config/pipewire/hrir.wav", "channel": '${hrir_rr_left:?}' } },
+            { "type": "builtin", "label": "convolver", "name": "convFC_R", "config": { "filename": "'${HOME:?}'/.config/pipewire/hrir.wav", "channel": '${hrir_fc_right:?}' } },
+            { "type": "builtin", "label": "convolver", "name": "convLFE_L", "config": { "filename": "'${HOME:?}'/.config/pipewire/hrir.wav", "channel": '${hrir_fc_left:?}' } },
+            { "type": "builtin", "label": "convolver", "name": "convLFE_R", "config": { "filename": "'${HOME:?}'/.config/pipewire/hrir.wav", "channel": '${hrir_fc_right:?}' } },
             { "type": "builtin", "label": "mixer", "name": "mixL" },
             { "type": "builtin", "label": "mixer", "name": "mixR" }
         ],
@@ -129,22 +145,22 @@ args_8='{
             { "output": "copyFC:Out", "input": "convFC_R:In" },
             { "output": "copyLFE:Out", "input": "convLFE_L:In" },
             { "output": "copyLFE:Out", "input": "convLFE_R:In" },
-            { "output": "convFL_L:Out", "input": "mixL:In 1" },
-            { "output": "convFL_R:Out", "input": "mixR:In 1" },
-            { "output": "convSL_L:Out", "input": "mixL:In 2" },
-            { "output": "convSL_R:Out", "input": "mixR:In 2" },
-            { "output": "convRL_L:Out", "input": "mixL:In 3" },
-            { "output": "convRL_R:Out", "input": "mixR:In 3" },
-            { "output": "convFC_L:Out", "input": "mixL:In 4" },
-            { "output": "convFC_R:Out", "input": "mixR:In 4" },
-            { "output": "convFR_R:Out", "input": "mixR:In 5" },
-            { "output": "convFR_L:Out", "input": "mixL:In 5" },
-            { "output": "convSR_R:Out", "input": "mixR:In 6" },
-            { "output": "convSR_L:Out", "input": "mixL:In 6" },
-            { "output": "convRR_R:Out", "input": "mixR:In 7" },
-            { "output": "convRR_L:Out", "input": "mixL:In 7" },
-            { "output": "convLFE_R:Out", "input": "mixR:In 8" },
-            { "output": "convLFE_L:Out", "input": "mixL:In 8" }
+            { "output": "convFL_L:Out", "input": "mixL:In 1", "gain": "'${mix_gain_db:?}'" },
+            { "output": "convFL_R:Out", "input": "mixR:In 1", "gain": "'${mix_gain_db:?}'" },
+            { "output": "convSL_L:Out", "input": "mixL:In 2", "gain": "'${mix_gain_db:?}'" },
+            { "output": "convSL_R:Out", "input": "mixR:In 2", "gain": "'${mix_gain_db:?}'" },
+            { "output": "convRL_L:Out", "input": "mixL:In 3", "gain": "'${mix_gain_db:?}'" },
+            { "output": "convRL_R:Out", "input": "mixR:In 3", "gain": "'${mix_gain_db:?}'" },
+            { "output": "convFC_L:Out", "input": "mixL:In 4", "gain": "'${mix_gain_db:?}'" },
+            { "output": "convFC_R:Out", "input": "mixR:In 4", "gain": "'${mix_gain_db:?}'" },
+            { "output": "convFR_R:Out", "input": "mixR:In 5", "gain": "'${mix_gain_db:?}'" },
+            { "output": "convFR_L:Out", "input": "mixL:In 5", "gain": "'${mix_gain_db:?}'" },
+            { "output": "convSR_R:Out", "input": "mixR:In 6", "gain": "'${mix_gain_db:?}'" },
+            { "output": "convSR_L:Out", "input": "mixL:In 6", "gain": "'${mix_gain_db:?}'" },
+            { "output": "convRR_R:Out", "input": "mixR:In 7", "gain": "'${mix_gain_db:?}'" },
+            { "output": "convRR_L:Out", "input": "mixL:In 7", "gain": "'${mix_gain_db:?}'" },
+            { "output": "convLFE_R:Out", "input": "mixR:In 8", "gain": "'${mix_gain_db:?}'" },
+            { "output": "convLFE_L:Out", "input": "mixL:In 8", "gain": "'${mix_gain_db:?}'" }
         ],
         "inputs":  [ "copyFL:In", "copyFR:In", "copyFC:In", "copyLFE:In", "copyRL:In", "copyRR:In", "copySL:In", "copySR:In" ],
         "outputs": [ "mixL:Out", "mixR:Out" ]
@@ -154,13 +170,16 @@ args_8='{
         "audio.channels": 8,
         "audio.position": [ FL FR FC LFE RL RR SL SR ],
         "node.dont-fallback": true,
-        "node.linger": true
+        "node.linger": true,
+        "stream.dont-remix": true,
+        "channelmix.normalize": false
     },
     playback.props = {
         "node.passive": true,
         "audio.channels": 2,
         "audio.position": [ FL FR ],
-        "stream.dont-remix": true
+        "stream.dont-remix": true,
+        "channelmix.normalize": false
     }
 }'
 # 5.1
@@ -218,13 +237,16 @@ args_6='{
         "audio.channels": 6,
         "audio.position": [ FL FR FC LFE SL SR ],
         "node.dont-fallback": true,
-        "node.linger": true
+        "node.linger": true,
+        "stream.dont-remix": true,
+        "channelmix.normalize": false
     },
     playback.props = {
         "node.passive": true,
         "audio.channels": 2,
         "audio.position": [ FL FR ],
-        "stream.dont-remix": true
+        "stream.dont-remix": true,
+        "channelmix.normalize": false
     }
 }'
 #
