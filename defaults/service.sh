@@ -43,67 +43,6 @@ virtual_surround_device_sink_node="virtual-surround-sound-input"
 virtual_surround_device_sink_name="input.${virtual_surround_device_sink_node:?}"
 virtual_surround_devoce_sink_description="Virtual Surround Sound"
 
-virtual_dummy_sink_node="virtual-sink"
-virtual_dummy_sink_name="input.virtual-sink"
-virtual_dummy_sink_description="Virtual Sink"
-# 2
-dummy_virtual_sink_2=$(
-    cat <<EOF
-context.modules = [
-    { 
-        name = "libpipewire-module-filter-chain"
-        args = {
-            node.name = "${virtual_dummy_sink_node:?}"
-            node.description = "${virtual_dummy_sink_description:?}"
-            media.name = "${virtual_dummy_sink_description:?}"
-            filter.graph = {
-                nodes = [
-                    {
-                        name   = copyIL
-                        type   = builtin
-                        label  = copy
-                    }
-                    {
-                        name   = copyOL
-                        type   = builtin
-                        label  = copy
-                    }
-                    {
-                        name   = copyIR
-                        type   = builtin
-                        label  = copy
-                    }
-                    {
-                        name   = copyOR
-                        type   = builtin
-                        label  = copy
-                    }
-                ]
-                links = [
-                    { output = "copyIL:Out" input = "copyOL:In" }
-                    { output = "copyIR:Out" input = "copyOR:In" }
-                ]
-                inputs  = [ "copyIL:In" "copyIR:In" ]
-                outputs = [ "copyOL:Out" "copyOR:Out" ]
-            }
-            capture.props = {
-                node.name         = "input.${virtual_dummy_sink_node}"
-                media.class       = Audio/Sink
-                audio.channels    = 2
-                audio.position    = [ FL FR ]
-            }
-            playback.props = {
-                node.name         = "output.${virtual_dummy_sink_node}"
-                node.passive      = true
-                audio.channels    = 2
-                audio.position    = [ FL FR ]
-            }
-        }
-    }
-]
-EOF
-)
-
 # 7.1
 device_module_args_8=$(
     cat <<EOF
@@ -244,139 +183,6 @@ filter_module_args_8=$(
 }
 EOF
 )
-# 5.1
-device_module_args_6=$(
-    cat <<EOF
-{
-    "audio.channels": 6,
-    "audio.position": [ FL FR FC LFE SL SR ],
-    "node.name": "${virtual_surround_device_sink_node:?}",
-    "node.description": "${virtual_surround_devoce_sink_description:?}",
-    filter.graph = {
-        "nodes": [
-            { "type": "builtin", "label": "copy", "name": "copyFL" },
-            { "type": "builtin", "label": "copy", "name": "copyFR" },
-            { "type": "builtin", "label": "copy", "name": "copyFC" },
-            { "type": "builtin", "label": "copy", "name": "copyLFE" },
-            { "type": "builtin", "label": "copy", "name": "copySL" },
-            { "type": "builtin", "label": "copy", "name": "copySR" }
-        ],
-        "inputs":  [ "copyFL:In", "copyFR:In", "copyFC:In", "copyLFE:In", "copySL:In", "copySR:In" ],
-        "outputs": [ "copyFL:Out", "copyFR:Out", "copyFC:Out", "copyLFE:Out", "copySL:Out", "copySR:Out" ]
-    },
-    capture.props = {
-        "media.class": "Audio/Sink",
-        "node.name": "${virtual_surround_device_sink_name:?}",
-        "node.description": "${virtual_surround_devoce_sink_description:?}",
-        "node.dont-fallback": true,
-        "node.passive": true,
-        "node.linger": true,
-        "node.autoconnect": false,
-        "stream.dont-remix": true,
-        "channelmix.normalize": false,
-        "audio.channels": 6,
-        "audio.position": [ FL FR FC LFE SL SR ]
-    },
-    playback.props = {
-        "node.passive": true,
-        "node.autoconnect": false,
-        "stream.dont-remix": true,
-        "channelmix.normalize": false,
-        "audio.channels": 6,
-        "audio.position": [ FL FR FC LFE SL SR ]
-    }
-}
-EOF
-)
-filter_module_args_6=$(
-    cat <<EOF
-{
-    "audio.channels": 6,
-    "audio.position": ["FL","FR","FC","LFE","SL","SR"],
-    "node.name": "${virtual_surround_filter_sink_node:?}",
-    "node.description": "${virtual_surround_filter_sink_description:?}",
-    filter.graph = {
-        "nodes": [
-            { "type": "builtin", "label": "copy", "name": "copyFL" },
-            { "type": "builtin", "label": "copy", "name": "copyFR" },
-            { "type": "builtin", "label": "copy", "name": "copyFC" },
-            { "type": "builtin", "label": "copy", "name": "copyLFE" },
-            { "type": "builtin", "label": "copy", "name": "copySL" },
-            { "type": "builtin", "label": "copy", "name": "copySR" },
-            { "type": "builtin", "label": "convolver", "name": "convFL_L", "config": { "filename": "${HOME:?}/.config/pipewire/hrir.wav", "channel": ${hrir_fl_left:?} } },
-            { "type": "builtin", "label": "convolver", "name": "convFL_R", "config": { "filename": "${HOME:?}/.config/pipewire/hrir.wav", "channel": ${hrir_fl_right:?} } },
-            { "type": "builtin", "label": "convolver", "name": "convFR_L", "config": { "filename": "${HOME:?}/.config/pipewire/hrir.wav", "channel": ${hrir_fr_left:?} } },
-            { "type": "builtin", "label": "convolver", "name": "convFR_R", "config": { "filename": "${HOME:?}/.config/pipewire/hrir.wav", "channel": ${hrir_fr_right:?} } },
-            { "type": "builtin", "label": "convolver", "name": "convFC_L", "config": { "filename": "${HOME:?}/.config/pipewire/hrir.wav", "channel": ${hrir_fc_left:?} } },
-            { "type": "builtin", "label": "convolver", "name": "convFC_R", "config": { "filename": "${HOME:?}/.config/pipewire/hrir.wav", "channel": ${hrir_fc_right:?} } },
-            { "type": "builtin", "label": "convolver", "name": "convLFE_L", "config": { "filename": "${HOME:?}/.config/pipewire/hrir.wav", "channel": ${hrir_fc_left:?} } },
-            { "type": "builtin", "label": "convolver", "name": "convLFE_R", "config": { "filename": "${HOME:?}/.config/pipewire/hrir.wav", "channel": ${hrir_fc_right:?} } },
-            { "type": "builtin", "label": "convolver", "name": "convSL_L", "config": { "filename": "${HOME:?}/.config/pipewire/hrir.wav", "channel": ${hrir_sl_left:?} } },
-            { "type": "builtin", "label": "convolver", "name": "convSL_R", "config": { "filename": "${HOME:?}/.config/pipewire/hrir.wav", "channel": ${hrir_sl_right:?} } },
-            { "type": "builtin", "label": "convolver", "name": "convSR_L", "config": { "filename": "${HOME:?}/.config/pipewire/hrir.wav", "channel": ${hrir_sr_left:?} } },
-            { "type": "builtin", "label": "convolver", "name": "convSR_R", "config": { "filename": "${HOME:?}/.config/pipewire/hrir.wav", "channel": ${hrir_sr_right:?} } },
-            { "type": "builtin", "label": "mixer", "name": "mixL" },
-            { "type": "builtin", "label": "mixer", "name": "mixR" }
-        ],
-        "links": [
-            { "output": "copyFL:Out",   "input": "convFL_L:In" },
-            { "output": "copyFL:Out",   "input": "convFL_R:In" },
-            { "output": "copyFR:Out",   "input": "convFR_L:In" },
-            { "output": "copyFR:Out",   "input": "convFR_R:In" },
-            { "output": "copyFC:Out",   "input": "convFC_L:In" },
-            { "output": "copyFC:Out",   "input": "convFC_R:In" },
-            { "output": "copyLFE:Out",  "input": "convLFE_L:In" },
-            { "output": "copyLFE:Out",  "input": "convLFE_R:In" },
-            { "output": "copySL:Out",   "input": "convSL_L:In" },
-            { "output": "copySL:Out",   "input": "convSL_R:In" },
-            { "output": "copySR:Out",   "input": "convSR_L:In" },
-            { "output": "copySR:Out",   "input": "convSR_R:In" },
-            { "output": "convFL_L:Out", "input": "mixL:In 1", "gain": "${mix_gain_db:?}" },
-            { "output": "convFR_L:Out", "input": "mixL:In 2", "gain": "${mix_gain_db:?}" },
-            { "output": "convFC_L:Out", "input": "mixL:In 3", "gain": "${mix_gain_db:?}" },
-            { "output": "convLFE_L:Out","input": "mixL:In 4", "gain": "${mix_gain_db:?}" },
-            { "output": "convSL_L:Out", "input": "mixL:In 5", "gain": "${mix_gain_db:?}" },
-            { "output": "convSR_L:Out", "input": "mixL:In 6", "gain": "${mix_gain_db:?}" },
-            { "output": "convFL_R:Out", "input": "mixR:In 1", "gain": "${mix_gain_db:?}" },
-            { "output": "convFR_R:Out", "input": "mixR:In 2", "gain": "${mix_gain_db:?}" },
-            { "output": "convFC_R:Out", "input": "mixR:In 3", "gain": "${mix_gain_db:?}" },
-            { "output": "convLFE_R:Out","input": "mixR:In 4", "gain": "${mix_gain_db:?}" },
-            { "output": "convSL_R:Out", "input": "mixR:In 5", "gain": "${mix_gain_db:?}" },
-            { "output": "convSR_R:Out", "input": "mixR:In 6", "gain": "${mix_gain_db:?}" }
-        ],
-        "inputs":  [ "copyFL:In", "copyFR:In", "copyFC:In", "copyLFE:In", "copySL:In", "copySR:In" ],
-        "outputs": [ "mixL:Out", "mixR:Out" ]
-    },
-    capture.props = {
-        "media.class": "Audio/Sink",
-        "audio.channels": 6,
-        "audio.position": [ FL FR FC LFE SL SR ],
-        "node.dont-fallback": true,
-        "node.linger": true,
-        "node.autoconnect": false,
-        "stream.dont-remix": true,
-        "channelmix.normalize": false
-    },
-    playback.props = {
-        "node.passive": true,
-        "node.autoconnect": false,
-        "audio.channels": 2,
-        "audio.position": [ FL FR ],
-        "stream.dont-remix": true,
-        "channelmix.normalize": false
-    }
-}
-EOF
-)
-#
-#             { "output": "convFC:Out",   "input": "mixL:In 3", "gain": "+3dB" }
-#             { "output": "convLFE:Out",  "input": "mixL:In 4" }
-#             { "output": "convSL_L:Out", "input": "mixL:In 5" }
-#             { "output": "convSR_L:Out", "input": "mixL:In 6" }
-#             { "output": "convFL_R:Out", "input": "mixR:In 1" }
-#             { "output": "convFR_R:Out", "input": "mixR:In 2" }
-#             { "output": "convFC:Out",   "input": "mixR:In 3", "gain": "+3dB" }
-#
 # Check channel counthrir.wav files with command:
 #   > ffprobe -v error -select_streams a:0 -show_entries stream=channels -of default=noprint_wrappers=1:nokey=1 /home/deck/.config/pipewire/hrir.wav
 # Or get all info
@@ -397,7 +203,6 @@ device_module_pid_file="${XDG_RUNTIME_DIR:?}/${virtual_surround_device_sink_node
 service_name="virtual-surround-sound.service"
 service_file="${HOME:?}/.config/systemd/user/${service_name:?}"
 run_script="${HOME:?}/.config/pipewire/run.sh"
-dummy_virtual_sink_path="${HOME:?}/.config/pipewire/pipewire.conf.d/virtual-sink.conf"
 service_config=$(
     cat <<EOF
 [Unit]
@@ -428,9 +233,6 @@ cleanup() {
     systemctl --user disable "${service_name}" >/dev/null 2>&1 || true
     rm -f "${service_file}" >/dev/null 2>&1 || true
     systemctl --user daemon-reload >/dev/null 2>&1 || true
-    if [[ -f "${dummy_virtual_sink_path:?}" ]]; then
-        rm -f "${dummy_virtual_sink_path:?}" >/dev/null 2>&1 || true
-    fi
     rm -f "${run_script:?}" >/dev/null 2>&1 || true
 }
 
@@ -479,11 +281,8 @@ cleanup_virtual_surround_module() {
 }
 
 create_virtual_surround_module() {
-    local channel_count="$1"
+    local channel_count="${1:-8}"
     local module_args="${filter_module_args_8}"
-    if [[ "${channel_count}" == "6" ]]; then
-        module_args="${filter_module_args_6}"
-    fi
 
     cleanup_virtual_surround_module
 
@@ -526,11 +325,8 @@ cleanup_virtual_surround_default_sink() {
 }
 
 create_virtual_surround_default_sink() {
-    local channel_count="$1"
+    local channel_count="${1:-8}"
     local module_args="${device_module_args_8}"
-    if [[ "${channel_count}" == "6" ]]; then
-        module_args="${device_module_args_6}"
-    fi
 
     cleanup_virtual_surround_default_sink
 
@@ -593,13 +389,8 @@ link_ports() {
 }
 
 link_virtual_surround_chain() {
-    local channel_count="$1"
-    local -a channels
-    if [[ "${channel_count}" == "6" ]]; then
-        channels=(FL FR FC LFE SL SR)
-    else
-        channels=(FL FR FC LFE RL RR SL SR)
-    fi
+    local channel_count="${1:-8}"
+    local -a channels=(FL FR FC LFE RL RR SL SR)
 
     local device_node="${virtual_surround_device_sink_node}"
     local filter_node="${virtual_surround_filter_sink_node}"
@@ -723,31 +514,13 @@ is_pid_running() {
 
 run() {
     echo "Running service"
+    if [[ $# -gt 0 ]]; then
+        echo "Invalid arg: $1"
+        print_usage_and_exit 1
+    fi
     local channels="8"
-    while [[ $# -gt 0 ]]; do
-        case "$1" in
-        --channels=*)
-            channels="${1#*=}"
-            ;;
-        --channels)
-            shift
-            channels="$1"
-            ;;
-        *)
-            echo "Invalid arg: $1"
-            print_usage_and_exit 1
-            ;;
-        esac
-        shift
-    done
 
     reset_default_sink
-
-    # Configure the module args to use
-    if [[ "$channels" != "6" && "$channels" != "8" ]]; then
-        echo "Invalid channels value: $channels. Must be 6 or 8."
-        exit 1
-    fi
 
     if ! create_virtual_surround_module "${channels:?}"; then
         _term
@@ -801,8 +574,8 @@ speaker_test() {
         esac
         shift
     done
-    if [[ "$pulse_sink" != "${virtual_surround_filter_sink_node:?}" && "$pulse_sink" != "${virtual_dummy_sink_node:?}" ]]; then
-        echo "Select sink: $pulse_sink. Must be ${virtual_surround_filter_sink_node:?} or ${virtual_dummy_sink_node:?}."
+    if [[ "$pulse_sink" != "${virtual_surround_filter_sink_node:?}" ]]; then
+        echo "Select sink: $pulse_sink. Must be ${virtual_surround_filter_sink_node:?}."
         exit 1
     fi
 
@@ -814,13 +587,9 @@ speaker_test() {
 
 install_service() {
     echo "Installing service: ${service_name:?}"
-    local install_dummy_virtual_sink="false"
     local restart_after_install="false"
     while [[ $# -gt 0 ]]; do
         case "$1" in
-        --install-dummy-virtual-sink)
-            install_dummy_virtual_sink="true"
-            ;;
         --restart-after-install)
             restart_after_install="true"
             ;;
@@ -831,30 +600,6 @@ install_service() {
         esac
         shift
     done
-    if [[ "${install_dummy_virtual_sink:?}" = "true" ]]; then
-        # For now, only install this if the virtual sink exists. If it does not, then we will ignore it
-        echo "  - Creating directory: '${HOME:?}/.config/pipewire/pipewire.conf.d'"
-        mkdir -p \
-            "${HOME:?}/.config/pipewire/tmp" \
-            "${HOME:?}/.config/pipewire/pipewire.conf.d"
-        # Only install and restart pipewire if the config has changed
-        local dummy_virtual_sink_tmp="${HOME:?}/.config/pipewire/tmp/virtual-sink.conf"
-        echo "${dummy_virtual_sink_2:?}" >"${dummy_virtual_sink_tmp:?}"
-        local dummy_virtual_sink_modified="false"
-        if [[ ! -f "${dummy_virtual_sink_path:?}" ]]; then
-            dummy_virtual_sink_modified="true"
-        elif ! cmp -s "${dummy_virtual_sink_tmp:?}" "${dummy_virtual_sink_path:?}"; then
-            dummy_virtual_sink_modified="true"
-        fi
-        if [[ "${dummy_virtual_sink_modified:-}" = "true" ]]; then
-            echo "  - Installing dummy virtual-sink.conf"
-            cp -f "${dummy_virtual_sink_tmp:?}" "${dummy_virtual_sink_path:?}"
-            echo "  - Restarting wireplumber pipewire pipewire-pulse systemd services"
-            systemctl --user restart wireplumber pipewire pipewire-pulse
-        else
-            echo "  - The dummy virtual-sink.conf has not changed"
-        fi
-    fi
     echo "  - Creating directory: '${HOME:?}/.config/pipewire'"
     mkdir -p "${HOME:?}/.config/pipewire"
     echo "  - Ensure directory and all contents is RW by the user"
@@ -893,8 +638,6 @@ uninstall_service() {
         systemctl --user daemon-reload
         echo "  - Removing run wrapper script: ${run_script:?}"
         rm -f "${run_script:?}"
-        echo "  - Removing custom virtual-sink.conf"
-        rm -f "${dummy_virtual_sink_path:?}"
         echo "Systemd service stopped and uninstalled."
     else
         echo "Systemd service has not been installed. Run this script with the 'install' command to install it."
@@ -924,7 +667,7 @@ stop_service() {
 }
 
 print_usage_and_exit() {
-    echo "Usage: $0 {run|install|uninstall|restart|stop|kill-all} [--channels=<6|8>] [additional args...]"
+    echo "Usage: $0 {run|install|uninstall|restart|stop|kill-all} [additional args...]"
     exit "$1"
 }
 
