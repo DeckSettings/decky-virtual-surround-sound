@@ -139,7 +139,6 @@ sofa_dest_path = os.path.join(pipewire_config_path, "hrir.sofa")
 
 VIRTUAL_SURROUND_FILTER_SINK_NODE = "input.virtual-surround-sound-filter"
 VIRTUAL_SURROUND_DEVICE_SINK_NODE = "input.virtual-surround-sound-input"
-VIRTUAL_SURROUND_FALLBACK_SINK_NODE = "input.virtual-sink"
 
 
 def subprocess_exec_env():
@@ -334,17 +333,14 @@ class Plugin:
         if not isinstance(sink_inputs, list):
             sink_inputs = []
 
-        # Find the sinks for "Virtual Surround Sound" and "Virtual Sink"
+        # Find the sinks for the Virtual Surround Sound nodes
         virtual_surround_filter_sink = next((sink for sink in sinks if sink.get("name")
                                              == VIRTUAL_SURROUND_FILTER_SINK_NODE), None)
         virtual_surround_device_sink = next((sink for sink in sinks if sink.get("name")
                                              == VIRTUAL_SURROUND_DEVICE_SINK_NODE), None)
-        virtual_sink = next((sink for sink in sinks if sink.get("name") == VIRTUAL_SURROUND_FALLBACK_SINK_NODE), None)
         if not virtual_surround_filter_sink:
             decky.logger.error("Required sink not found. Virtual Surround Sound is missing.")
             return
-        if not virtual_sink:
-            decky.logger.debug("Virtual Sink is missing. Will attempt to detect the current default sink instead.")
 
         virtual_surround_object_id = self._object_id_from_sink(virtual_surround_filter_sink)
         virtual_surround_index = self._sink_index_from_entry(virtual_surround_filter_sink)
@@ -358,35 +354,26 @@ class Plugin:
         # Determine the default_sink_id and default_sink_index
         default_sink_id: int | None = None
         default_sink_index: int | None = None
-        if virtual_sink:
-            default_sink_id = self._object_id_from_sink(virtual_sink)
-            default_sink_index = self._sink_index_from_entry(virtual_sink)
-            if default_sink_id is None or default_sink_index is None:
-                decky.logger.warning("Virtual Sink is missing metadata; unable to use as fallback.")
-                default_sink_id = None
-                default_sink_index = None
-
-        if default_sink_id is None or default_sink_index is None:
-            fallback_sink_id = await self.get_highest_priority_sink_id()
-            if fallback_sink_id is not None:
-                fallback_sink = next(
-                    (sink for sink in sinks if self._object_id_from_sink(sink) == fallback_sink_id),
-                    None
+        fallback_sink_id = await self.get_highest_priority_sink_id()
+        if fallback_sink_id is not None:
+            fallback_sink = next(
+                (sink for sink in sinks if self._object_id_from_sink(sink) == fallback_sink_id),
+                None
+            )
+            if fallback_sink:
+                default_sink_id = self._object_id_from_sink(fallback_sink)
+                default_sink_index = self._sink_index_from_entry(fallback_sink)
+                decky.logger.debug(
+                    "Using highest priority sink (object %s, index %s).",
+                    default_sink_id, default_sink_index
                 )
-                if fallback_sink:
-                    default_sink_id = self._object_id_from_sink(fallback_sink)
-                    default_sink_index = self._sink_index_from_entry(fallback_sink)
-                    decky.logger.debug(
-                        "Using highest priority sink (object %s, index %s).",
-                        default_sink_id, default_sink_index
-                    )
-                else:
-                    decky.logger.warning(
-                        "Fallback sink object id %s not found; cannot determine sink index.",
-                        fallback_sink_id
-                    )
-            if default_sink_id is None or default_sink_index is None:
-                decky.logger.warning("Unable to determine fallback default sink; leaving default unchanged.")
+            else:
+                decky.logger.warning(
+                    "Fallback sink object id %s not found; cannot determine sink index.",
+                    fallback_sink_id
+                )
+        if default_sink_id is None or default_sink_index is None:
+            decky.logger.warning("Unable to determine fallback default sink; leaving default unchanged.")
 
         # Ensure that the "Virtual Surround Sound" is default
         use_surround_sink_as_default = await self.get_surround_sink_default()
@@ -434,8 +421,10 @@ class Plugin:
                     await self.set_sink_for_application(sink_input['index'], virtual_surround_target_index)
             else:
                 # If the app is not enabled but is currently assigned to the Virtual Surround Sound sink,
-                # move it to the Virtual Sink.
+                # move it to the Virtual Sink unless the VSS device is currently the default sink.
                 if current_sink_index in surround_sink_indices:
+                    if use_surround_sink_as_default:
+                        continue
                     if default_sink_index is None:
                         decky.logger.warning(
                             "Default sink index unresolved; cannot move %s to fallback sink.", app_name
