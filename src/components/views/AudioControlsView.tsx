@@ -308,18 +308,31 @@ const AudioControlsView: React.FC<AudioControlsViewProps> = ({ onChangePage }) =
   return (
     <>
       <div>
-        <PanelSection>
-          <Focusable style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}
+        <div style={{ padding: '3px 16px 3px 16px', margin: 0 }}>
+          <Focusable style={{ display: 'flex', alignItems: 'stretch', gap: '1rem', height: '26px' }}
             flow-children="horizontal">
             <DialogButton
-              style={{ width: '100%', minWidth: 0 }}
+              // @ts-ignore
+              autoFocus={true}
+              retainFocus={true}
+              style={{
+                width: '73px',
+                minWidth: '73px',
+                padding: '3px',
+                fontSize: '14px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '1rem',
+              }}
               onClick={() => onChangePage('plugin_config')}>
-              <MdSettings /> Plugin Settings
+              <MdSettings />
             </DialogButton>
           </Focusable>
-        </PanelSection>
+        </div>
         <hr />
       </div>
+
       {sinkInputList.length === 0 ? (
         isApplicationListLoading && !hasLoadedApplicationList ? (
           <div style={{
@@ -450,7 +463,7 @@ const AudioControlsView: React.FC<AudioControlsViewProps> = ({ onChangePage }) =
         </>
       )}
       <hr />
-      <div className={staticClasses.PanelSectionTitle} style={{ marginLeft: '10px' }}>Mixer</div>
+      <div className={staticClasses.PanelSectionTitle} style={{ marginLeft: '10px' }}>Filter Settings</div>
       <PanelSection>
         <PanelSectionRow>
           {/*TODO: Add app icon*/}
@@ -465,28 +478,33 @@ const AudioControlsView: React.FC<AudioControlsViewProps> = ({ onChangePage }) =
             }}
           />
         </PanelSectionRow>
+      </PanelSection>
+      <div className={staticClasses.PanelSectionTitle} style={{ marginLeft: '10px' }}>Mixer</div>
+      <PanelSection>
         {/*Volume mixer*/}
-        <PanelSectionRow>
-          {channels.map(({ code, label }) => (
-            <SliderField
-              key={code}
-              min={0}
-              max={150}
-              step={5}
-              notchCount={4}
-              notchTicksVisible={false}
-              label={label}
-              showValue
-              layout="inline"
-              bottomSeparator="none"
-              icon={<FaVolumeUp />}
-              value={mixerVolumes[code] ?? 100}
-              onChange={(value: number) => {
-                handleVolumeChange(code, value)
-              }}
-            />
-          ))}
-        </PanelSectionRow>
+        {channels.map(({ code, label }) => (
+          <>
+            <PanelSectionRow>
+              <SliderField
+                key={code}
+                min={0}
+                max={150}
+                step={5}
+                notchCount={4}
+                notchTicksVisible={false}
+                label={label}
+                showValue
+                layout="inline"
+                bottomSeparator="none"
+                icon={<FaVolumeUp />}
+                value={mixerVolumes[code] ?? 100}
+                onChange={(value: number) => {
+                  handleVolumeChange(code, value)
+                }}
+              />
+            </PanelSectionRow>
+          </>
+        ))}
       </PanelSection>
     </>
   )

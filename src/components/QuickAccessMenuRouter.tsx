@@ -5,15 +5,15 @@ import AudioControlsView from './views/AudioControlsView'
 import { Footer } from './elements/AuthorFooter'
 
 
-const QuickAccessView: React.FC = () => {
+const QuickAccessMenuRouter: React.FC = () => {
   const [currentPage, setCurrentPage] = useState<PluginPage>('audio_controls')
   const changePage = (page: PluginPage) => {
-    console.log(`[QuickAccessView] Changing page to: ${page}`)
+    console.log(`[decky-virtual-surround-sound:QuickAccessMenuRouter] Changing page to: ${page}`)
     setCurrentPage(page)
   }
 
   useEffect(() => {
-    console.log(`[QuickAccessView] Current page changed to: ${currentPage}`)
+    console.log(`[decky-virtual-surround-sound:QuickAccessMenuRouter] Current page changed to: ${currentPage}`)
   }, [currentPage])
 
   return (
@@ -36,4 +36,4 @@ const QuickAccessView: React.FC = () => {
 
 }
 
-export default QuickAccessView
+export default QuickAccessMenuRouter

@@ -3,8 +3,6 @@ import { Channel, MixerProfile, PluginConfig } from './interfaces'
 import { Router } from '@decky/ui'
 import { call } from '@decky/api'
 
-export const deckyPluginAvatarUrl = 'https://deckverified.games/deck-verified/api/v1/images/plugin/decky-virtual-surround-sound/avatar.jpg'
-
 export const restartSteamClient = (): void => {
   SteamClient.User.StartRestart(false)
 }

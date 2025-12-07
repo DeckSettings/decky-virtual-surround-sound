@@ -75,4 +75,3 @@ export const PanelSocialButton: FC<{
     </PanelSectionRow>
   )
 }
-

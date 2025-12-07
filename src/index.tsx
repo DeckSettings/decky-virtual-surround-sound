@@ -2,7 +2,7 @@ import {
   definePlugin,
   // routerHook
 } from '@decky/api'
-import QuickAccessView from './components/QuickAccessView'
+import QuickAccessMenuRouter from './components/QuickAccessMenuRouter'
 import { MdSurroundSound } from 'react-icons/md'
 import { getCurrentMixerProfile, setMixerProfileInBackend } from './constants'
 
@@ -35,7 +35,7 @@ export default definePlugin(() => {
     // Preserve the plugin's state while the QAM is closed
     alwaysRender: true,
     // The content of your plugin's menu
-    content: <QuickAccessView />,
+    content: <QuickAccessMenuRouter />,
     // The icon displayed in the plugin list
     icon: <MdSurroundSound />,
     // The function triggered when your plugin unloads
