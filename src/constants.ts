@@ -79,7 +79,7 @@ const pluginSettingsKey = __PLUGIN_NAME__
 
 export const getPluginConfig = (): PluginConfig => {
   const defaultConfig: PluginConfig = {
-    notesAcknowledgedV1: false,
+    notesAcknowledgedV2: false,
     hrirName: 'HRTF from Aureal Vortex 2 - WIP v2',
     channelCount: 8,
     usePerAppProfiles: false,

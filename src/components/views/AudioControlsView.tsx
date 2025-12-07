@@ -26,7 +26,7 @@ import {
   setPluginConfig,
 } from '../../constants'
 import { FaVolumeUp } from 'react-icons/fa'
-import { popupNotesDialog } from '../elements/NotesDialog'
+import { popupVssHelpDialog } from '../elements/VssHelpDialog'
 
 
 interface AudioControlsViewProps {
@@ -272,9 +272,9 @@ const AudioControlsView: React.FC<AudioControlsViewProps> = ({ onChangePage }) =
 
   const handleAppSelect = async (app: SinkInputConsolidated, enabled: boolean) => {
     console.log(`[decky-virtual-surround-sound:AudioControlsView] Setting app to state ${enabled} [Title:${app.name}]`)
-    if (!currentConfig?.notesAcknowledgedV1) {
+    if (!currentConfig?.notesAcknowledgedV2) {
       console.log(`[decky-virtual-surround-sound:AudioControlsView] Divert to first display warnings dialog.`)
-      popupNotesDialog(() => {
+      popupVssHelpDialog(() => {
         console.log(`[decky-virtual-surround-sound:AudioControlsView] Reloading settings.`)
         setCurrentConfig(getPluginConfig())
       })

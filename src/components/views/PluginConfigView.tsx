@@ -14,7 +14,7 @@ import { getPluginConfig, setPluginConfig } from '../../constants'
 import { call } from '@decky/api'
 import { PanelSocialButton } from '../elements/SocialButton'
 import { VscSurroundWith } from 'react-icons/vsc'
-import { popupNotesDialog } from '../elements/NotesDialog'
+import { popupVssHelpDialog } from '../elements/VssHelpDialog'
 import { popupHrirInfoDialog } from '../elements/HrirInfoDialog'
 import { TiInfo } from 'react-icons/ti'
 
@@ -96,9 +96,9 @@ const PluginConfigView: React.FC<PluginConfigViewProps> = ({ onGoBack }) => {
 
   const handleEnableSurroundDefaultSink = async (enabled: boolean) => {
     console.log(`[decky-virtual-surround-sound:PluginConfigView] Configure Virtual Surround Sink as default: ${enabled}`)
-    if (!currentConfig?.notesAcknowledgedV1) {
+    if (!currentConfig?.notesAcknowledgedV2) {
       console.log(`[decky-virtual-surround-sound:PluginConfigView] Divert to first display warnings dialog.`)
-      popupNotesDialog(() => {
+      popupVssHelpDialog(() => {
         console.log(`[decky-virtual-surround-sound:PluginConfigView] Reloading settings.`)
         setCurrentConfig(getPluginConfig())
       })
@@ -173,22 +173,11 @@ const PluginConfigView: React.FC<PluginConfigViewProps> = ({ onGoBack }) => {
                     disabled={(surroundSinkDefaultConfig === null)}
                   />
                   <div style={helperTextStyle}>
-                    Some applications, particularly games and media players, query the system's default audio sink at launch
-                    to determine the channel layout (e.g., stereo or 7.1 surround).
-                    <br />
-                    If the virtual surround sound sink is not set as the default when these apps start, they will typically
-                    detect only a stereo output and configure their audio accordingly.
-                    <br />
-                    Changing the sink afterward won't cause the application to re-query PipeWire for updated channel
-                    capabilities, meaning the app will continue outputting 2-channel audio even if moved to a multichannel
-                    sink.
-                    <br />
-                    To ensure proper surround sound, the virtual surround sink must be the default before launching the
-                    application.
+                    Setting this sink as the system default helps surround-aware apps stay multichannel, though it can make some stereo-only apps behave differently.
                   </div>
                   <DialogButton
                     style={actionButtonStyle}
-                    onClick={() => popupNotesDialog()}
+                    onClick={() => popupVssHelpDialog(undefined, { hideAcknowledge: true })}
                   >
                     <TiInfo size="1em" /> More Info
                   </DialogButton>
