@@ -14,6 +14,8 @@ import { call } from '@decky/api'
 import { PanelSocialButton } from '../elements/SocialButton'
 import { VscSurroundWith } from 'react-icons/vsc'
 import { popupNotesDialog } from '../elements/NotesDialog'
+import { popupHrirInfoDialog } from '../elements/HrirInfoDialog'
+import { TiInfo } from 'react-icons/ti'
 
 interface PluginConfigViewProps {
   onGoBack: () => void
@@ -207,17 +209,19 @@ const PluginConfigView: React.FC<PluginConfigViewProps> = ({ onGoBack }) => {
                     strDefaultLabel="Select HRIR Profile"
                   />
                   <div style={helperTextStyle}>
-                    Choose from the list of Head-Related Impulse Response (HRIR) .wav files, which captures
-                    how sound is modified by the shape of your head and ears. This will be applied to your
-                    audio signal, to create a realistic binaural effect, simulating surround sound through
-                    headphones. Pick a profile (e.g., Atmos, DTS, Steam) that best suits your taste. You can
-                    also manually supply your own (see below).
+                    Choose from the list of Head-Related Impulse Response (HRIR) .wav files, which captures how
+                    sound is modified by the shape of a human head and ears. These HRIRs are applied to your audio
+                    so the plugin can simulate a realistic binaural surround effect on headphones.
                     <br />
-                    If you wish to provide your own HRIR .wav file, you can download it from the HRTF
-                    Database and install it to <code>~/.config/pipewire/hrir.wav</code>.
-                    (Changing presets in this plugin will overwrite that file. To prevent this, set it to
-                    read-only to prevent changes.)
+                    Tap <strong>More HRIR Info</strong> below to learn in simple terms how HRTF/HRIR works and how 
+                    to add your own custom HRIR files.
                   </div>
+                  <DialogButton
+                    style={actionButtonStyle}
+                    onClick={() => popupHrirInfoDialog()}
+                  >
+                    <TiInfo size="1em" /> More HRIR Info
+                  </DialogButton>
                 </div>
               </PanelSectionRow>
 
