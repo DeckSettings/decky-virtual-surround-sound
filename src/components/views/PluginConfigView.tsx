@@ -186,6 +186,12 @@ const PluginConfigView: React.FC<PluginConfigViewProps> = ({ onGoBack }) => {
                     To ensure proper surround sound, the virtual surround sink must be the default before launching the
                     application.
                   </div>
+                  <DialogButton
+                    style={actionButtonStyle}
+                    onClick={() => popupNotesDialog()}
+                  >
+                    <TiInfo size="1em" /> More Info
+                  </DialogButton>
                 </div>
               </PanelSectionRow>
             </PanelSection>
