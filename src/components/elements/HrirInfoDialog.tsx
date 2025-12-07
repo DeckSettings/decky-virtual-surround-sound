@@ -1,4 +1,4 @@
-import { ConfirmModal, Focusable, showModal } from '@decky/ui'
+import { ConfirmModal, DialogButton, Focusable, Navigation, Router, showModal } from '@decky/ui'
 import { QRCodeSVG } from 'qrcode.react'
 import { TiInfo } from 'react-icons/ti'
 import { ScrollableWindowRelative } from './ScrollableWindow'
@@ -23,6 +23,11 @@ const hrirDbLinks = [
     url: 'http://recherche.ircam.fr/equipes/salles/listen/',
   },
 ]
+
+const openExternalLink = (url: string) => {
+  Navigation.NavigateToExternalWeb(url)
+  Router.CloseSideMenus()
+}
 
 export const popupHrirInfoDialog = (onCloseCallback = () => {
 }) => {
@@ -151,12 +156,12 @@ export const popupHrirInfoDialog = (onCloseCallback = () => {
                     </div>
                   </li>
                   <li>
-                    Scan the QR codes below or tap the links to open the Airtable database that hosts a large collection of HRIR files.
+                    Scan or tap the QR codes below to open the linked knowledge resources and HRIR database entries.
                   </li>
                 </ul>
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: '12px', marginTop: '4px', alignItems: 'flex-start' }}>
                   {hrirDbLinks.map((entry) => (
-                    <div
+                    <DialogButton
                       key={entry.url}
                       style={{
                         flex: '0 0 120px',
@@ -165,13 +170,22 @@ export const popupHrirInfoDialog = (onCloseCallback = () => {
                         padding: 8,
                         border: '1px solid rgba(255, 255, 255, 0.15)',
                         borderRadius: 6,
-                        textAlign: 'center',
+                        textAlign: 'left',
                         background: '#131722',
+                        justifyContent: 'flex-start',
+                        alignItems: 'center',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '6px',
+                      }}
+                      onClick={() => {
+                        handleClose()
+                        openExternalLink(entry.url)
                       }}
                     >
-                      <QRCodeSVG value={entry.url} size={100} marginSize={4} />
-                      <div style={{ marginTop: '6px', fontSize: '11px', wordBreak: 'break-word' }}>{entry.label}</div>
-                    </div>
+                      <QRCodeSVG value={entry.url} size={90} marginSize={4} />
+                      <div style={{ fontSize: '11px', wordBreak: 'break-word' }}>{entry.label}</div>
+                    </DialogButton>
                   ))}
                 </div>
               </div>
