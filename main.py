@@ -137,9 +137,6 @@ hrir_dest_path = os.path.join(pipewire_config_path, "hrir.wav")
 sofa_directory = os.path.join(script_directory, "hrtf-sofa")
 sofa_dest_path = os.path.join(pipewire_config_path, "hrir.sofa")
 
-VIRTUAL_SURROUND_FILTER_SINK_NODE = "input.virtual-surround-sound-filter"
-VIRTUAL_SURROUND_DEVICE_SINK_NODE = "input.virtual-surround-sound-input"
-
 
 def subprocess_exec_env():
     uid = os.getuid()
@@ -175,6 +172,46 @@ async def service_script_exec(command, args=None):
                 decky.logger.info(line)
     except Exception as e:
         decky.logger.error(f"Error executing service script: {e}")
+
+
+async def _fetch_virtual_surround_sink_info() -> dict[str, str]:
+    service_script = os.path.join(script_directory, "service.sh")
+    try:
+        process = await asyncio.create_subprocess_exec(
+            service_script, "print-vss-info",
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+            env=subprocess_exec_env()
+        )
+    except FileNotFoundError:
+        decky.logger.error("service.sh not found at %s", service_script)
+        return {}
+    except Exception as exc:
+        decky.logger.error("Error executing service script: %s", exc)
+        return {}
+
+    stdout, stderr = await process.communicate()
+    if process.returncode != 0:
+        decky.logger.error("service.sh print-vss-info failed: %s", stderr.decode().strip())
+        return {}
+
+    info: dict[str, str] = {}
+    for line in stdout.decode().splitlines():
+        if ':' not in line:
+            continue
+        key, value = line.split(':', 1)
+        info[key.strip()] = value.strip()
+    return info
+
+
+async def get_virtual_surround_sink_names() -> tuple[str | None, str | None]:
+    info = await _fetch_virtual_surround_sink_info()
+    filter_name = info.get("VSS Filter Name")
+    device_name = info.get("VSS Device Name")
+    if not filter_name or not device_name:
+        decky.logger.error("service.sh missing virtual surround sink names: %s", info)
+        return None, None
+    return filter_name, device_name
 
 
 async def async_wait(evt: asyncio.Event, timeout: float) -> bool:
@@ -255,7 +292,7 @@ class Plugin:
         decky.logger.info("Background tasks started")
         while not self.stop_event.is_set():
             try:
-                #decky.logger.info("Running task to ensure applications are assigned to their configured sinks")
+                # decky.logger.info("Running task to ensure applications are assigned to their configured sinks")
                 await self.check_state()
                 # Wait for 10 seconds, or exit early if stop_event is set.
                 try:
@@ -333,6 +370,10 @@ class Plugin:
         if not target_name:
             return False
         try:
+            filter_name, device_name = await get_virtual_surround_sink_names()
+            if not filter_name or not device_name:
+                decky.logger.error("Unable to resolve virtual surround sink names")
+                return False
             sinks = await self.list_sinks()
             virtual_sink_indices: set[int] = set()
             for sink in sinks:
@@ -340,7 +381,7 @@ class Plugin:
                 if sink_index is None:
                     continue
                 sink_name = sink.get("name")
-                if sink_name == VIRTUAL_SURROUND_DEVICE_SINK_NODE or sink_name == VIRTUAL_SURROUND_FILTER_SINK_NODE:
+                if sink_name == device_name or sink_name == filter_name:
                     virtual_sink_indices.add(sink_index)
 
             if not virtual_sink_indices:
@@ -375,11 +416,16 @@ class Plugin:
         if not isinstance(sink_inputs, list):
             sink_inputs = []
 
+        filter_name, device_name = await get_virtual_surround_sink_names()
+        if not filter_name or not device_name:
+            decky.logger.error("Unable to resolve virtual surround sink names")
+            return
+
         # Find the sinks for the Virtual Surround Sound nodes
         virtual_surround_filter_sink = next((sink for sink in sinks if sink.get("name")
-                                             == VIRTUAL_SURROUND_FILTER_SINK_NODE), None)
+                                             == filter_name), None)
         virtual_surround_device_sink = next((sink for sink in sinks if sink.get("name")
-                                             == VIRTUAL_SURROUND_DEVICE_SINK_NODE), None)
+                                             == device_name), None)
         if not virtual_surround_filter_sink:
             decky.logger.error("Required sink not found. Virtual Surround Sound is missing.")
             return
@@ -1103,11 +1149,15 @@ class Plugin:
             }
           }
         """
+        filter_name, _ = await get_virtual_surround_sink_names()
+        if not filter_name:
+            decky.logger.error("Unable to resolve virtual surround filter sink name")
+            return False
         sinks = await self.list_sinks()
         target_sink = None
         for sink in sinks:
             # Look for the sink named "input.virtual-surround-sound"
-            if sink.get("name") == VIRTUAL_SURROUND_FILTER_SINK_NODE:
+            if sink.get("name") == filter_name:
                 target_sink = sink
                 break
         if target_sink is None:

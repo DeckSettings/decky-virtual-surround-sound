@@ -35,7 +35,7 @@ fi
 
 virtual_surround_device_sink_node="virtual-surround-sound-input"
 virtual_surround_device_sink_name="input.${virtual_surround_device_sink_node:?}"
-virtual_surround_devoce_sink_description="Virtual Surround Sound"
+virtual_surround_device_sink_description="Virtual Surround Sound"
 
 # 7.1
 device_module_args_8=$(
@@ -44,7 +44,7 @@ device_module_args_8=$(
     "audio.channels": 8,
     "audio.position": [ FL FR FC LFE RL RR SL SR ],
     "node.name": "${virtual_surround_device_sink_node:?}",
-    "node.description": "${virtual_surround_devoce_sink_description:?}",
+    "node.description": "${virtual_surround_device_sink_description:?}",
     filter.graph = {
         "nodes": [
             { "type": "builtin", "label": "copy", "name": "copyFL" },
@@ -62,7 +62,7 @@ device_module_args_8=$(
     capture.props = {
         "media.class": "Audio/Sink",
         "node.name": "${virtual_surround_device_sink_name:?}",
-        "node.description": "${virtual_surround_devoce_sink_description:?}",
+        "node.description": "${virtual_surround_device_sink_description:?}",
         "node.dont-fallback": true,
         "node.passive": true,
         "node.linger": true,
@@ -882,8 +882,15 @@ stop_service() {
 }
 
 print_usage_and_exit() {
-    echo "Usage: $0 {run|install|uninstall|restart|stop|kill-all} [--filter=<convolver|sofa>] [additional args...]"
+    echo "Usage: $0 {run|install|uninstall|restart|stop|kill-all|print-vss-info} [--filter=<convolver|sofa>] [additional args...]"
     exit "$1"
+}
+
+print_vss_info() {
+    printf 'VSS Filter Node: %s\n' "${virtual_surround_filter_sink_node:?}"
+    printf 'VSS Filter Name: %s\n' "${virtual_surround_filter_sink_name:?}"
+    printf 'VSS Device Node: %s\n' "${virtual_surround_device_sink_node:?}"
+    printf 'VSS Device Name: %s\n' "${virtual_surround_device_sink_description:?}"
 }
 
 # Check if the effective user ID is 0 (root)
@@ -922,6 +929,9 @@ case "$cmd" in
     ;;
 "kill-all")
     kill_all_running_instances "$@"
+    ;;
+"print-vss-info")
+    print_vss_info
     ;;
 *)
     echo "Invalid command: $cmd"
