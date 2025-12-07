@@ -206,8 +206,8 @@ async def _fetch_virtual_surround_sink_info() -> dict[str, str]:
 
 async def get_virtual_surround_sink_names() -> tuple[str | None, str | None]:
     info = await _fetch_virtual_surround_sink_info()
-    filter_name = info.get("VSS Filter Name")
-    device_name = info.get("VSS Device Name")
+    filter_name = info.get("VSS Filter Capture Name")
+    device_name = info.get("VSS Device Capture Name")
     if not filter_name or not device_name:
         decky.logger.error("service.sh missing virtual surround sink names: %s", info)
         return None, None

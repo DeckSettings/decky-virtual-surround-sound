@@ -24,18 +24,21 @@ _handle_signal() {
 
 mix_gain_db="-6dB"
 
-# Configure pipewire module
-virtual_surround_filter_sink_node="virtual-surround-sound-filter"
-virtual_surround_filter_sink_name="input.virtual-surround-sound-filter"
+# Configure pipewire modules names/descriptions
+virtual_surround_filter_sink_node_name="vss-filter"
 virtual_surround_filter_sink_description="Virtual Surround Sound Filter"
+virtual_surround_filter_sink_capture_node_name="input.vss-filter"
+virtual_surround_filter_sink_playback_node_name="output.vss-filter"
 if [[ -n "${VIRTUAL_SURROUND_SINK_SUFFIX:-}" ]]; then
-    virtual_surround_filter_sink_name="virtual-surround-sound-${VIRTUAL_SURROUND_SINK_SUFFIX:-}"
+    virtual_surround_filter_sink_node_name="vss-filter"
     virtual_surround_filter_sink_description="Virtual Surround Sound (${VIRTUAL_SURROUND_SINK_SUFFIX:-})"
+    virtual_surround_filter_sink_capture_node_name="input.vss-filter-${VIRTUAL_SURROUND_SINK_SUFFIX:-}"
+    virtual_surround_filter_sink_playback_node_name="output.vss-filter-${VIRTUAL_SURROUND_SINK_SUFFIX:-}"
 fi
-
-virtual_surround_device_sink_node="virtual-surround-sound-input"
-virtual_surround_device_sink_name="input.${virtual_surround_device_sink_node:?}"
+virtual_surround_device_sink_node_name="virtual-surround-sound"
 virtual_surround_device_sink_description="Virtual Surround Sound"
+virtual_surround_device_sink_capture_node_name="Virtual Surround Sound"
+virtual_surround_device_sink_playback_node_name="output.virtual-surround-sound"
 
 # 7.1
 device_module_args_8=$(
@@ -43,7 +46,7 @@ device_module_args_8=$(
 {
     "audio.channels": 8,
     "audio.position": [ FL FR FC LFE RL RR SL SR ],
-    "node.name": "${virtual_surround_device_sink_node:?}",
+    "node.name": "${virtual_surround_device_sink_node_name:?}",
     "node.description": "${virtual_surround_device_sink_description:?}",
     filter.graph = {
         "nodes": [
@@ -61,7 +64,7 @@ device_module_args_8=$(
     },
     capture.props = {
         "media.class": "Audio/Sink",
-        "node.name": "${virtual_surround_device_sink_name:?}",
+        "node.name": "${virtual_surround_device_sink_capture_node_name:?}",
         "node.description": "${virtual_surround_device_sink_description:?}",
         "node.dont-fallback": true,
         "node.passive": true,
@@ -73,6 +76,7 @@ device_module_args_8=$(
         "audio.position": [ FL FR FC LFE RL RR SL SR ]
     },
     playback.props = {
+        "node.name": "${virtual_surround_device_sink_playback_node_name:?}",
         "node.passive": true,
         "node.autoconnect": false,
         "stream.dont-remix": true,
@@ -88,7 +92,7 @@ filter_module_convolver_args_8=$(
 {
     "audio.channels": 8,
     "audio.position": ["FL","FR","FC","LFE","RL","RR","SL","SR"],
-    "node.name": "${virtual_surround_filter_sink_node:?}",
+    "node.name": "${virtual_surround_filter_sink_node_name:?}",
     "node.description": "${virtual_surround_filter_sink_description:?}",
     filter.graph = {
         "nodes": [
@@ -157,7 +161,7 @@ filter_module_convolver_args_8=$(
         "outputs": [ "mixL:Out", "mixR:Out" ]
     },
     capture.props = {
-        "node.name": "input.${virtual_surround_filter_sink_node:?}",
+        "node.name": "${virtual_surround_filter_sink_capture_node_name:?}",
         "node.description": "${virtual_surround_filter_sink_description:?}",
         "media.class": "Audio/Sink",
         "audio.channels": 8,
@@ -169,7 +173,7 @@ filter_module_convolver_args_8=$(
         "channelmix.normalize": false
     },
     playback.props = {
-        "node.name": "output.${virtual_surround_filter_sink_node:?}",
+        "node.name": "${virtual_surround_filter_sink_playback_node_name:?}",
         "node.passive": true,
         "node.autoconnect": false,
         "audio.channels": 2,
@@ -185,7 +189,7 @@ filter_module_sofa_args_8=$(
 {
     "audio.channels": 8,
     "audio.position": ["FL","FR","FC","LFE","RL","RR","SL","SR"],
-    "node.name": "${virtual_surround_filter_sink_node:?}",
+    "node.name": "${virtual_surround_filter_sink_node_name:?}",
     "node.description": "${virtual_surround_filter_sink_description:?}",
     filter.graph = {
         "nodes": [
@@ -318,7 +322,7 @@ filter_module_sofa_args_8=$(
         "outputs": [ "mixL:Out", "mixR:Out" ]
     },
     capture.props = {
-        "node.name": "input.${virtual_surround_filter_sink_node:?}",
+        "node.name": "${virtual_surround_filter_sink_capture_node_name:?}",
         "media.class": "Audio/Sink",
         "audio.channels": 8,
         "audio.position": [ FL FR FC LFE RL RR SL SR ],
@@ -329,7 +333,7 @@ filter_module_sofa_args_8=$(
         "channelmix.normalize": false
     },
     playback.props = {
-        "node.name": "output.${virtual_surround_filter_sink_node:?}",
+        "node.name": "${virtual_surround_filter_sink_playback_node_name:?}",
         "node.passive": true,
         "node.autoconnect": false,
         "audio.channels": 2,
@@ -355,8 +359,8 @@ fi
 if [ -z "${XDG_RUNTIME_DIR:-}" ]; then
     export XDG_RUNTIME_DIR="/run/user/$(id -u)"
 fi
-filter_module_pid_file="${XDG_RUNTIME_DIR:?}/${virtual_surround_filter_sink_node:?}.pid"
-device_module_pid_file="${XDG_RUNTIME_DIR:?}/${virtual_surround_device_sink_node:?}.pid"
+filter_module_pid_file="${XDG_RUNTIME_DIR:?}/${virtual_surround_filter_sink_node_name:?}.pid"
+device_module_pid_file="${XDG_RUNTIME_DIR:?}/${virtual_surround_device_sink_node_name:?}.pid"
 service_name="virtual-surround-sound.service"
 service_file="${HOME:?}/.config/systemd/user/${service_name:?}"
 run_script="${HOME:?}/.config/pipewire/run.sh"
@@ -449,19 +453,19 @@ create_virtual_surround_module() {
 
     cleanup_virtual_surround_module
 
-    echo "Creating and loading module libpipewire-module-filter-chain (${filter_type:?}) with ${channel_count:?} channels - ${virtual_surround_filter_sink_name:?}"
+    echo "Creating and loading module libpipewire-module-filter-chain (${filter_type:?}) with ${channel_count:?} channels - ${virtual_surround_filter_sink_capture_node_name:?}"
     pw-cli -m load-module libpipewire-module-filter-chain "${module_args:?}" &
     virtual_surround_filter_sink_pw_cli_pid=$!
     echo "${virtual_surround_filter_sink_pw_cli_pid:?}" >"${filter_module_pid_file:?}"
     sleep 1 # <- sleep for a second to ensure everything is loaded before linking
 
-    if ! wait_for_sink_registration "${virtual_surround_filter_sink_name:?}" 40 0.25; then
-        echo "ERROR! Unable to detect sink '${virtual_surround_filter_sink_name:?}' after loading module."
+    if ! wait_for_sink_registration "${virtual_surround_filter_sink_capture_node_name:?}" 40 0.25; then
+        echo "ERROR! Unable to detect sink '${virtual_surround_filter_sink_capture_node_name:?}' after loading module."
         cleanup_virtual_surround_module
         return 1
     fi
 
-    echo "Created filter-chain sink '${virtual_surround_filter_sink_name:?}' (pid ${virtual_surround_filter_sink_pw_cli_pid:?})"
+    echo "Created filter-chain sink '${virtual_surround_filter_sink_capture_node_name:?}' (pid ${virtual_surround_filter_sink_pw_cli_pid:?})"
     return 0
 }
 
@@ -493,19 +497,19 @@ create_virtual_surround_default_sink() {
 
     cleanup_virtual_surround_default_sink
 
-    echo "Creating and loading module libpipewire-module-filter-chain with ${channel_count:?} channels - ${virtual_surround_device_sink_name:?}"
+    echo "Creating and loading module libpipewire-module-filter-chain with ${channel_count:?} channels - ${virtual_surround_device_sink_capture_node_name:?}"
     pw-cli -m load-module libpipewire-module-filter-chain "${module_args:?}" &
     virtual_surround_device_sink_pw_cli_pid=$!
     echo "${virtual_surround_device_sink_pw_cli_pid:?}" >"${device_module_pid_file:?}"
     sleep 1 # <- sleep for a second to ensure everything is loaded before linking
 
-    if ! wait_for_sink_registration "${virtual_surround_device_sink_name:?}" 40 0.25; then
-        echo "ERROR! Unable to detect sink '${virtual_surround_device_sink_name:?}' after loading module."
+    if ! wait_for_sink_registration "${virtual_surround_device_sink_capture_node_name:?}" 40 0.25; then
+        echo "ERROR! Unable to detect sink '${virtual_surround_device_sink_capture_node_name:?}' after loading module."
         cleanup_virtual_surround_default_sink
         return 1
     fi
 
-    echo "Created filter-chain sink '${virtual_surround_device_sink_name:?}' (pid ${virtual_surround_device_sink_pw_cli_pid:?})"
+    echo "Created filter-chain sink '${virtual_surround_device_sink_capture_node_name:?}' (pid ${virtual_surround_device_sink_pw_cli_pid:?})"
     return 0
 }
 
@@ -555,20 +559,17 @@ link_virtual_surround_chain() {
     local channel_count="${1:-8}"
     local -a channels=(FL FR FC LFE RL RR SL SR)
 
-    local device_node="${virtual_surround_device_sink_node}"
-    local filter_node="${virtual_surround_filter_sink_node}"
-    device_node="${device_node#input.}"
-    device_node="${device_node#output.}"
-    filter_node="${filter_node#input.}"
-    filter_node="${filter_node#output.}"
-    local default_output_prefix="output.${device_node}:output_"
-    local surround_input_prefix="input.${filter_node}:playback_"
-    local surround_output_prefix="output.${filter_node}:output_"
+    local device_playback_node="${virtual_surround_device_sink_playback_node_name:?}"
+    local filter_capture_node="${virtual_surround_filter_sink_capture_node_name:?}"
+    local filter_playback_node="${virtual_surround_filter_sink_playback_node_name:?}"
+    local default_output_prefix="${device_playback_node}:output_"
+    local surround_input_prefix="${filter_capture_node}:playback_"
+    local surround_output_prefix="${filter_playback_node}:output_"
 
     local default_sink_name
     default_sink_name=$(wpctl status | awk '/\*/ && /Audio\/Sink/ { sub(/.*\*\s*[0-9]+\.\s*/, ""); sub(/\s*\[.*/, ""); print; exit }' | sed 's/[[:space:]]*$//')
-    local virtual_filter="${virtual_surround_filter_sink_name:?}"
-    local virtual_device="${virtual_surround_device_sink_name:?}"
+    local virtual_filter="${virtual_surround_filter_sink_capture_node_name:?}"
+    local virtual_device="${virtual_surround_device_sink_capture_node_name:?}"
 
     if [[ -n "${default_sink_name}" && ("${default_sink_name}" == "${virtual_filter}" || "${default_sink_name}" == "${virtual_device}") ]]; then
         if ! command -v python3 >/dev/null 2>&1; then
@@ -667,11 +668,11 @@ virtual_surround_sinks_exist() {
         return 1
     fi
 
-    if ! grep -Fxq -- "${virtual_surround_filter_sink_name:?}" <<<"${sink_list}"; then
+    if ! grep -Fxq -- "${virtual_surround_filter_sink_capture_node_name:?}" <<<"${sink_list}"; then
         return 1
     fi
 
-    if ! grep -Fxq -- "${virtual_surround_device_sink_name:?}" <<<"${sink_list}"; then
+    if ! grep -Fxq -- "${virtual_surround_device_sink_capture_node_name:?}" <<<"${sink_list}"; then
         return 1
     fi
 
@@ -681,7 +682,7 @@ virtual_surround_sinks_exist() {
 kill_all_running_instances() {
     cleanup_virtual_surround_module
     cleanup_virtual_surround_default_sink
-    running_pids=$(ps aux | grep -i "pw-cli -m load-module" | grep -v grep | grep "${virtual_surround_filter_sink_node:?}" | awk '{print $2}')
+    running_pids=$(ps aux | grep -i "pw-cli -m load-module" | grep -v grep | grep "${virtual_surround_filter_sink_node_name:?}" | awk '{print $2}')
     if [ -n "${running_pids}" ]; then
         kill -TERM ${running_pids}
     fi
@@ -762,7 +763,7 @@ run() {
 
 speaker_test() {
     echo "Running sound test"
-    local pulse_sink_name="${virtual_surround_filter_sink_name:?}"
+    local pulse_sink_name="${virtual_surround_filter_sink_capture_node_name:?}"
     while [[ $# -gt 0 ]]; do
         case "$1" in
         --sink=*)
@@ -887,10 +888,10 @@ print_usage_and_exit() {
 }
 
 print_vss_info() {
-    printf 'VSS Filter Node: %s\n' "${virtual_surround_filter_sink_node:?}"
-    printf 'VSS Filter Name: %s\n' "${virtual_surround_filter_sink_name:?}"
-    printf 'VSS Device Node: %s\n' "${virtual_surround_device_sink_node:?}"
-    printf 'VSS Device Name: %s\n' "${virtual_surround_device_sink_description:?}"
+    printf 'VSS Filter Node Name: %s\n' "${virtual_surround_filter_sink_node_name:?}"
+    printf 'VSS Filter Capture Name: %s\n' "${virtual_surround_filter_sink_capture_node_name:?}"
+    printf 'VSS Device Node Name: %s\n' "${virtual_surround_device_sink_node_name:?}"
+    printf 'VSS Device Capture Name: %s\n' "${virtual_surround_device_sink_description:?}"
 }
 
 # Check if the effective user ID is 0 (root)
