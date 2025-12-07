@@ -3,10 +3,11 @@ import {
   PanelSectionRow,
   DialogButton,
   Focusable,
-  Dropdown, Navigation, Router, ToggleField,
+  Dropdown,
+  ToggleField,
 } from '@decky/ui'
 import { useState, useEffect, CSSProperties } from 'react'
-import { MdArrowBack, MdSurroundSound, MdWeb } from 'react-icons/md'
+import { MdArrowBack, MdSurroundSound } from 'react-icons/md'
 import { SiDiscord, SiGithub, SiKofi, SiPatreon } from 'react-icons/si'
 import { HrirFile, PluginConfig } from '../../interfaces'
 import { getPluginConfig, setPluginConfig } from '../../constants'
@@ -126,11 +127,6 @@ const PluginConfigView: React.FC<PluginConfigViewProps> = ({ onGoBack }) => {
     updateHrirFileListList()
   }, [])
 
-  const openWeb = (url: string) => {
-    Navigation.NavigateToExternalWeb(url)
-    Router.CloseSideMenus()
-  }
-
   return (
     <>
       <div style={{ padding: '3px 16px 3px 16px', margin: 0 }}>
@@ -213,7 +209,7 @@ const PluginConfigView: React.FC<PluginConfigViewProps> = ({ onGoBack }) => {
                     sound is modified by the shape of a human head and ears. These HRIRs are applied to your audio
                     so the plugin can simulate a realistic binaural surround effect on headphones.
                     <br />
-                    Tap <strong>More HRIR Info</strong> below to learn in simple terms how HRTF/HRIR works and how 
+                    Tap <strong>More HRIR Info</strong> below to learn in simple terms how HRTF/HRIR works and how
                     to add your own custom HRIR files.
                   </div>
                   <DialogButton
@@ -223,16 +219,6 @@ const PluginConfigView: React.FC<PluginConfigViewProps> = ({ onGoBack }) => {
                     <TiInfo size="1em" /> More HRIR Info
                   </DialogButton>
                 </div>
-              </PanelSectionRow>
-
-              <PanelSectionRow>
-                <DialogButton
-                  style={actionButtonStyle}
-                  onClick={() => {
-                    openWeb(`https://airtable.com/appayGNkn3nSuXkaz/shruimhjdSakUPg2m/tbloLjoZKWJDnLtTc`)
-                  }}>
-                  <MdWeb /> Go To HRTF Database
-                </DialogButton>
               </PanelSectionRow>
 
               <PanelSectionRow>
@@ -250,19 +236,20 @@ const PluginConfigView: React.FC<PluginConfigViewProps> = ({ onGoBack }) => {
                   letterSpacing: '.5px',
                 }}>Test your selected profile
                 </div>
+
                 <DialogButton
                   style={actionButtonStyle}
                   onClick={() => runSoundTest('virtual-surround-sound-filter')}
                 >
                   <MdSurroundSound /> Surround Enabled
                 </DialogButton>
-                <br />
                 <DialogButton
                   style={actionButtonStyle}
                   onClick={() => runSoundTest('default')}
                 >
                   <VscSurroundWith /> Surround Disabled
                 </DialogButton>
+
                 <br />
                 <div style={helperTextStyle}>
                   Compare how audio sounds with and without the virtual surround filter applied.
