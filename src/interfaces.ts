@@ -70,5 +70,14 @@ export interface SinkInputConsolidated {
   formats: SinkInputFormat[];
   volume: string;
   target_object: string;
+  sink?: number;
+  connectedToVirtualSurroundSink?: boolean;
   enabled: boolean;
+}
+
+export interface Sink {
+  index?: number;
+  name?: string;
+  description?: string;
+  properties?: Record<string, string>;
 }

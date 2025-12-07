@@ -325,6 +325,48 @@ class Plugin:
             decky.logger.info("App %s was not enabled.", app_name)
         return True
 
+    async def is_app_connected_to_virtual_surround_sink(self, app_name: str) -> bool:
+        """Determines if the given app is currently routed to the Virtual Surround Sound sink."""
+        if not isinstance(app_name, str):
+            return False
+        target_name = app_name.strip()
+        if not target_name:
+            return False
+        try:
+            sinks = await self.list_sinks()
+            virtual_sink_indices: set[int] = set()
+            for sink in sinks:
+                sink_index = self._sink_index_from_entry(sink)
+                if sink_index is None:
+                    continue
+                sink_name = sink.get("name")
+                if sink_name == VIRTUAL_SURROUND_DEVICE_SINK_NODE or sink_name == VIRTUAL_SURROUND_FILTER_SINK_NODE:
+                    virtual_sink_indices.add(sink_index)
+
+            if not virtual_sink_indices:
+                return False
+
+            sink_inputs = await self.list_sink_inputs()
+            normalized_target = target_name.lower()
+            for sink_input in sink_inputs:
+                entry_name = sink_input.get("name")
+                candidate_names: list[str] = []
+                if isinstance(entry_name, str):
+                    candidate_names.append(entry_name.strip())
+                canonical_name = self._sink_input_app_name(sink_input)
+                if canonical_name:
+                    candidate_names.append(canonical_name.strip())
+                if not candidate_names:
+                    continue
+                if not any((name or '').lower() == normalized_target for name in candidate_names if name):
+                    continue
+                sink_index = self._parse_int(sink_input.get("sink"), -1)
+                if sink_index in virtual_sink_indices:
+                    return True
+        except Exception as exc:
+            decky.logger.error("Error checking virtual sink connection for %s: %s", app_name, exc)
+        return False
+
     async def check_state(self):
         settings.read()
         enabled_apps = await self.get_enabled_apps_list()

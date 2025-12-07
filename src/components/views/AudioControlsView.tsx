@@ -3,7 +3,7 @@ import {
   DialogButton,
   PanelSection,
   PanelSectionRow,
-  Focusable, ToggleField, SliderField, Router,
+  Focusable, ToggleField, SliderField, Router, Spinner,
 } from '@decky/ui'
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import {
@@ -11,6 +11,7 @@ import {
   PluginConfig,
   PluginPage,
   RunningApp,
+  Sink,
   SinkInput,
   SinkInputConsolidated,
   SinkInputFormat,
@@ -42,7 +43,12 @@ const AudioControlsView: React.FC<AudioControlsViewProps> = ({ onChangePage }) =
     defaultMixerProfile.volumes,
   )
   const [sinkInputList, setSinkInputList] = useState<SinkInputConsolidated[]>([])
+  const [sinkLookup, setSinkLookup] = useState<Record<number, Sink>>({})
+  const [surroundSinkDefault, setSurroundSinkDefault] = useState<boolean>(false)
+  const [isApplicationListLoading, setIsApplicationListLoading] = useState<boolean>(true)
+  const [hasLoadedApplicationList, setHasLoadedApplicationList] = useState<boolean>(false)
   const updateApplicationList = async () => {
+    setIsApplicationListLoading(true)
     // First get the current running app
     const currentRunningApp = Router.MainRunningApp
     if (currentRunningApp) {
@@ -55,7 +61,25 @@ const AudioControlsView: React.FC<AudioControlsViewProps> = ({ onChangePage }) =
     // Second try to list all current sink inputs from backend
     try {
       const sinkInputs = await call<[], SinkInput[]>('list_sink_inputs')
-      if (!sinkInputs) return
+      const sinks = await call<[], Sink[]>('list_sinks')
+      const surroundSinkDefaultFlag = await call<[], boolean>('get_surround_sink_default')
+
+      const sinkInfoMap: Record<number, Sink> = {}
+      if (Array.isArray(sinks)) {
+        sinks.forEach((sinkEntry) => {
+          if (typeof sinkEntry.index !== 'number') {
+            return
+          }
+          sinkInfoMap[sinkEntry.index] = sinkEntry
+        })
+      }
+      setSinkLookup(sinkInfoMap)
+      setSurroundSinkDefault(!!surroundSinkDefaultFlag)
+
+      if (!sinkInputs) {
+        setSinkInputList([])
+        return
+      }
 
       const enabledApps = await call<[], string[]>('get_enabled_apps_list') ?? []
 
@@ -79,6 +103,7 @@ const AudioControlsView: React.FC<AudioControlsViewProps> = ({ onChangePage }) =
           channels: '',
           channel_map: [],
         }
+        const sinkIndex = typeof input.sink === 'number' ? input.sink : undefined
         if (appMap.has(appName)) {
           const existingApp = appMap.get(appName)!
           const hasFormat = existingApp.formats.some(f =>
@@ -95,6 +120,9 @@ const AudioControlsView: React.FC<AudioControlsViewProps> = ({ onChangePage }) =
           existingApp.volume = volumeSummary || existingApp.volume
           existingApp.target_object = targetObject || existingApp.target_object
           existingApp.enabled = enabled
+          if (typeof sinkIndex === 'number') {
+            existingApp.sink = sinkIndex
+          }
         } else {
           // First occurrence of this app, create a new consolidated entry
           appMap.set(appName, {
@@ -104,12 +132,32 @@ const AudioControlsView: React.FC<AudioControlsViewProps> = ({ onChangePage }) =
             volume: volumeSummary,
             target_object: targetObject,
             enabled,
+            sink: sinkIndex,
+            connectedToVirtualSurroundSink: false,
           })
         }
       })
-      setSinkInputList(Array.from(appMap.values()))
+      const consolidatedApps = Array.from(appMap.values())
+      if (consolidatedApps.length > 0) {
+        const connectionStatuses = await Promise.all(consolidatedApps.map(async (entry) => {
+          try {
+            const result = await call<[string], boolean>('is_app_connected_to_virtual_surround_sink', entry.name)
+            return !!result
+          } catch (error) {
+            console.error(`[decky-virtual-surround-sound:AudioControlsView] Error checking virtual sink for ${entry.name}:`, error)
+            return false
+          }
+        }))
+        consolidatedApps.forEach((entry, index) => {
+          entry.connectedToVirtualSurroundSink = connectionStatuses[index]
+        })
+      }
+      setSinkInputList(consolidatedApps)
     } catch (error) {
       console.error('[decky-virtual-surround-sound:AudioControlsView] Error fetching app details:', error)
+    } finally {
+      setIsApplicationListLoading(false)
+      setHasLoadedApplicationList(true)
     }
   }
 
@@ -201,6 +249,27 @@ const AudioControlsView: React.FC<AudioControlsViewProps> = ({ onChangePage }) =
     channelDebounceRef.current.set(channel, { timer, value })
   }
 
+  const getSinkLabelForIndex = useCallback(
+    (sinkIndex?: number): string => {
+      if (sinkIndex === undefined || sinkIndex === null) {
+        return 'the system default output'
+      }
+      const sinkInfo = sinkLookup[sinkIndex]
+      if (sinkInfo) {
+        const description = sinkInfo.description?.trim()
+        if (description) {
+          return description
+        }
+        const name = sinkInfo.name?.trim()
+        if (name) {
+          return name
+        }
+      }
+      return `Sink #${sinkIndex}`
+    },
+    [sinkLookup],
+  )
+
   const handleAppSelect = async (app: SinkInputConsolidated, enabled: boolean) => {
     console.log(`[decky-virtual-surround-sound:AudioControlsView] Setting app to state ${enabled} [Title:${app.name}]`)
     if (!currentConfig?.notesAcknowledgedV1) {
@@ -252,91 +321,132 @@ const AudioControlsView: React.FC<AudioControlsViewProps> = ({ onChangePage }) =
         <hr />
       </div>
       {sinkInputList.length === 0 ? (
-        <div style={{
-          textAlign: 'center',
-          fontSize: '0.8rem',
-          color: '#aaa',
-          marginTop: '10px',
-          padding: '10px',
-        }}>
-          🎵 No active applications are playing audio right now.
-        </div>
+        isApplicationListLoading && !hasLoadedApplicationList ? (
+          <div style={{
+            textAlign: 'center',
+            fontSize: '0.8rem',
+            color: '#aaa',
+            marginTop: '10px',
+            padding: '10px',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            gap: '8px',
+          }}>
+            <Spinner style={{ height: '30px', width: '30px', color: '#aaa' }} />
+            Finding active audio sources...
+          </div>
+        ) : (
+          <div style={{
+            textAlign: 'center',
+            fontSize: '0.8rem',
+            color: '#aaa',
+            marginTop: '10px',
+            padding: '10px',
+          }}>
+            🎵 No active applications are playing audio right now.
+          </div>
+        )
       ) : (
         <>
           <div className={staticClasses.PanelSectionTitle} style={{ marginLeft: '10px' }}>Sources</div>
-          {sinkInputList.map((app) => (
-            <PanelSection key={app.index} title={app.name}>
-              <PanelSectionRow>
-                <div style={{
-                  padding: 0,
-                  margin: 0,
-                  borderLeft: 'thin dotted',
-                }}>
-                  <ul style={{
-                    listStyle: 'none',
-                    fontSize: '0.7rem',
+          {sinkInputList.map((app) => {
+            const targetObjectValue = (app.target_object ?? '').trim()
+            const sinkIndex = app.sink
+            const isConnectedToVirtualSink = !!app.connectedToVirtualSurroundSink
+            const isDefaultVirtualRoute = surroundSinkDefault && isConnectedToVirtualSink && !targetObjectValue
+            const sinkLabel = getSinkLabelForIndex(sinkIndex)
+            const sinkSuffix = isDefaultVirtualRoute ? ' (default output)' : ''
+            const sinkStatusLabel = targetObjectValue
+              ? 'App explicitly pins its output target; change this within the application.'
+              : `Connected to ${sinkLabel}${sinkSuffix}`
+            const toggleDescription = targetObjectValue
+              ? 'This app routes audio to a locked sink; edit the app to change where it sends audio.'
+              : isDefaultVirtualRoute
+                ? 'Virtual Surround Sound is already the default output sink for this app.'
+                : 'Enable Virtual Surround Sound filter for this app'
+            return (
+              <PanelSection key={app.index} title={app.name}>
+                <PanelSectionRow>
+                  <div style={{
+                    padding: 0,
                     margin: 0,
-                    paddingLeft: '5px',
-                    paddingRight: 0,
-                    paddingTop: 0,
-                    paddingBottom: '3px',
+                    borderLeft: 'thin dotted',
                   }}>
-                    {app.formats.map((format, index) => (
-                      <li key={index}
-                        style={{
+                    <ul style={{
+                      listStyle: 'none',
+                      fontSize: '0.7rem',
+                      margin: 0,
+                      paddingLeft: '5px',
+                      paddingRight: 0,
+                      paddingTop: 0,
+                      paddingBottom: '3px',
+                    }}>
+                      {app.formats.map((format, index) => (
+                        <li key={index}
+                          style={{
+                            display: 'table',
+                            textAlign: 'right',
+                            width: '100%',
+                            borderBottom: '1px solid #333',
+                            paddingTop: '2px',
+                            paddingBottom: '2px',
+                          }}>
+                          <strong style={{
+                            display: 'table-cell',
+                            textAlign: 'left',
+                            paddingRight: '3px',
+                          }}>Audio #{index}:</strong>
+                          {format.format}_{format.sample_format}, {format.rate}Hz, {format.channels} channels
+                        </li>
+                      ))}
+                      {targetObjectValue !== '' && (
+                        <li style={{
                           display: 'table',
-                          textAlign: 'right',
+                          textAlign: 'left',
                           width: '100%',
                           borderBottom: '1px solid #333',
                           paddingTop: '2px',
                           paddingBottom: '2px',
                         }}>
-                        <strong style={{
-                          display: 'table-cell',
-                          textAlign: 'left',
-                          paddingRight: '3px',
-                        }}>Audio #{index}:</strong>
-                        {format.format}_{format.sample_format}, {format.rate}Hz, {format.channels} channels
-                      </li>
-                    ))}
-                    {app.target_object.trim() !== '' && (
-                      <li style={{
-                        display: 'table',
-                        textAlign: 'left',
-                        width: '100%',
-                        borderBottom: '1px solid #333',
-                        paddingTop: '2px',
-                        paddingBottom: '2px',
+                          <MdOutlineWarningAmber style={{ color: 'orange', marginRight: '3px' }} />
+                          <strong> NOTE: </strong>
+                          This app has specifically targeted an output and cannot be edited here.
+                          Try editing audio output from within the app.
+                        </li>
+                      )}
+                    </ul>
+                    <div style={{
+                      margin: 0,
+                      paddingLeft: '5px',
+                      paddingRight: '5px',
+                      paddingTop: 0,
+                      paddingBottom: 0,
+                      overflow: 'hidden',
+                    }}>
+                      <ToggleField
+                        label="Enable"
+                        description={toggleDescription}
+                        checked={app.enabled || isConnectedToVirtualSink}
+                        onChange={(e) => {
+                          handleAppSelect(app, e)
+                        }}
+                        disabled={targetObjectValue !== '' || isDefaultVirtualRoute}
+                      />
+                      <div style={{
+                        fontSize: '0.7rem',
+                        color: '#aaa',
+                        marginTop: '3px',
+                        whiteSpace: 'normal',
                       }}>
-                        <MdOutlineWarningAmber style={{ color: 'orange', marginRight: '3px' }} />
-                        <strong> NOTE: </strong>
-                        This app has specifically targeted an output and cannot be edited here.
-                        Try editing audio output from within the app.
-                      </li>
-                    )}
-                  </ul>
-                  <div style={{
-                    margin: 0,
-                    paddingLeft: '5px',
-                    paddingRight: '5px',
-                    paddingTop: 0,
-                    paddingBottom: 0,
-                    overflow: 'hidden',
-                  }}>
-                    <ToggleField
-                      label="Enable"
-                      description="Enable Virtual Surround Sound filter for this app"
-                      checked={app.enabled}
-                      onChange={(e) => {
-                        handleAppSelect(app, e)
-                      }}
-                      disabled={app.target_object.trim() !== ''}
-                    />
+                        {sinkStatusLabel}
+                      </div>
+                    </div>
                   </div>
-                </div>
-              </PanelSectionRow>
-            </PanelSection>
-          ))}
+                </PanelSectionRow>
+              </PanelSection>
+            )
+          })}
         </>
       )}
       <hr />
