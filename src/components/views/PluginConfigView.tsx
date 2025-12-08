@@ -250,11 +250,19 @@ const PluginConfigView: React.FC<PluginConfigViewProps> = ({ onGoBack }) => {
                   Compare how audio sounds with and without the virtual surround filter applied.
                   <br />
                   The top button plays the test sequence with the surround filter enabled, while the
-                  bottom button plays it through the default Steam Deck audio sink.
+                  bottom button plays it through the default SteamOS audio sink.
                   <br />
-                  Each test cycles through all 7.1 surround positions — Front Left (FL), Front Center
-                  (FC), Front Right (FR), Side Right (SR), Rear Right (RR), Rear Left (RL), Side Left (SL)
-                  — ending with a 50Hz Low-Frequency Effects (LFE) tone.
+                  Each test cycles through all 7.1 surround positions:
+                  <ul style={{ paddingLeft: 20, margin: 0 }}>
+                    <li>Front Left (FL)</li>
+                    <li>Front Center (FC)</li>
+                    <li>Front Right (FR)</li>
+                    <li>Side Right (SR)</li>
+                    <li>Rear Right (RR)</li>
+                    <li>Rear Left (RL)</li>
+                    <li>Side Left (SL)</li>
+                    <li>50Hz Low-Frequency Effects (LFE) tone (subwoofer)</li>
+                  </ul>
                 </div>
               </PanelSectionRow>
             </PanelSection>
