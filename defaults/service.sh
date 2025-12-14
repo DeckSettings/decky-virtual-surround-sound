@@ -891,7 +891,7 @@ print_vss_info() {
     printf 'VSS Filter Node Name: %s\n' "${virtual_surround_filter_sink_node_name:?}"
     printf 'VSS Filter Capture Name: %s\n' "${virtual_surround_filter_sink_capture_node_name:?}"
     printf 'VSS Device Node Name: %s\n' "${virtual_surround_device_sink_node_name:?}"
-    printf 'VSS Device Capture Name: %s\n' "${virtual_surround_device_sink_description:?}"
+    printf 'VSS Device Capture Name: %s\n' "${virtual_surround_device_sink_capture_node_name:?}"
 }
 
 # Check if the effective user ID is 0 (root)
