@@ -18,12 +18,9 @@ script_directory = os.path.dirname(os.path.abspath(__file__))
 plugin_dir_basename = os.path.basename(script_directory)
 tmp_log_dir = os.path.join(script_directory, "tmp", "logs")
 tmp_settings_dir = os.path.join(script_directory, "tmp", "config")
-tmp_runtime_dir = os.path.join(script_directory, "tmp", "runtime")
-FORCE_STDERR_LOGGING = False
-ORIGINAL_LOGGING_BASIC_CONFIG = logging.basicConfig
 
 
-def _ensure_directory(path: str) -> bool:
+def ensure_directory_exists(path: str) -> bool:
     """Create directory if possible, returning True on success."""
     try:
         os.makedirs(path, exist_ok=True)
@@ -32,86 +29,41 @@ def _ensure_directory(path: str) -> bool:
         return False
 
 
-def _force_stderr_basic_config() -> None:
-    """Patch logging.basicConfig so decky never tries to open log files when the log dir is unwritable."""
-    global FORCE_STDERR_LOGGING
-    if FORCE_STDERR_LOGGING:
-        return
-    FORCE_STDERR_LOGGING = True
-
-    def _patched_basic_config(*args, **kwargs):
-        kwargs.pop("filename", None)
-        if "handlers" not in kwargs:
-            kwargs["stream"] = sys.stderr
-        return ORIGINAL_LOGGING_BASIC_CONFIG(*args, **kwargs)
-
-    logging.basicConfig = _patched_basic_config
-
-
-def _ensure_file_handler(logger: logging.Logger, path: str) -> None:
-    """Attach a single FileHandler at the given path if not already present."""
-    target = os.path.abspath(path)
-    for handler in logger.handlers:
-        if isinstance(handler, logging.FileHandler) and handler.baseFilename == target:
-            return
-    try:
-        file_handler = logging.FileHandler(target)
-        file_handler.setFormatter(logging.Formatter('[%(asctime)s][%(levelname)s]: %(message)s'))
-        logger.addHandler(file_handler)
-    except OSError:
-        pass
-
-
-def _preferred_dir(kind: str, fallback: str) -> str:
+def detect_plugin_dir(kind: str, fallback: str) -> str:
     candidate = os.path.abspath(os.path.join(script_directory, os.pardir, os.pardir, kind, plugin_dir_basename))
     return candidate if os.path.isdir(candidate) else fallback
 
 
-log_dir = _preferred_dir("logs", tmp_log_dir)
-settings_dir = _preferred_dir("settings", tmp_settings_dir)
-runtime_dir = tmp_runtime_dir
+# Set our logs and settings directory
+log_dir = detect_plugin_dir("logs", tmp_log_dir)
+settings_dir = detect_plugin_dir("settings", tmp_settings_dir)
 
+# If the DECKY_ env vars are set, then use those as the priority
 log_dir = os.environ.get("DECKY_PLUGIN_LOG_DIR", log_dir)
 settings_dir = os.environ.get("DECKY_PLUGIN_SETTINGS_DIR", settings_dir)
-runtime_dir = os.environ.get("DECKY_PLUGIN_RUNTIME_DIR", runtime_dir)
 
-log_dir_writable = _ensure_directory(log_dir)
-_ensure_directory(settings_dir)
-_ensure_directory(runtime_dir)
+# Create the directories
+ensure_directory_exists(log_dir)
+ensure_directory_exists(settings_dir)
 
-cli_env_defaults_applied = False
-plugin_paths = {
+# Export the directories to env
+decy_plugin_dirs = {
     "DECKY_PLUGIN_LOG_DIR": log_dir,
     "DECKY_PLUGIN_SETTINGS_DIR": settings_dir,
-    "DECKY_PLUGIN_RUNTIME_DIR": runtime_dir,
 }
-for env_key, resolved_path in plugin_paths.items():
-    if not os.environ.get(env_key):
-        os.environ[env_key] = resolved_path
-        cli_env_defaults_applied = True
-
-if not log_dir_writable:
-    _force_stderr_basic_config()
+for env_key, resolved_path in decy_plugin_dirs.items():
+    os.environ.setdefault(env_key, resolved_path)
 
 # The decky plugin module is located at decky-loader/plugin
 # For easy intellisense checkout the decky-loader code repo
 # and add the `decky-loader/plugin/imports` path to `python.analysis.extraPaths` in `.vscode/settings.json`
-IS_CLI_ENV = cli_env_defaults_applied
-
 try:
     import decky
 except ModuleNotFoundError:
-    IS_CLI_ENV = True
-    handlers: list[logging.Handler] = [logging.StreamHandler(sys.stderr)]
-    if log_dir_writable:
-        try:
-            handlers.append(logging.FileHandler(os.path.join(log_dir, "decky.log")))
-        except OSError:
-            pass
     logging.basicConfig(
         level=logging.INFO,
         format='[%(asctime)s][%(levelname)s]: %(message)s',
-        handlers=handlers,
+        stream=sys.stderr,
     )
 
     class _DummyLogger:
@@ -120,8 +72,6 @@ except ModuleNotFoundError:
         def __init__(self):
             self._logger = logging.getLogger("decky-cli")
             self._logger.setLevel(logging.INFO)
-            if log_dir_writable:
-                _ensure_file_handler(self._logger, os.path.join(log_dir, "decky.log"))
             self._logger.propagate = True
 
         def info(self, msg, *args):
@@ -154,12 +104,6 @@ except ModuleNotFoundError:
             self.logger.debug("Skipping decky.migrate_runtime in CLI mode")
 
     decky = _DummyDecky()
-
-if FORCE_STDERR_LOGGING:
-    decky.logger.handlers = [
-        handler for handler in decky.logger.handlers
-        if handler.formatter is not None
-    ]
 
 try:
     from settings import SettingsManager  # type: ignore
@@ -194,20 +138,6 @@ except ModuleNotFoundError:
         def setSetting(self, key, value):
             self._settings[key] = value
             self._write()
-
-# Determine script path
-# Get environment variables with CLI-friendly defaults
-log_dir = os.environ.get("DECKY_PLUGIN_LOG_DIR", os.path.join(script_directory, "tmp", "logs"))
-settings_dir = os.environ.get("DECKY_PLUGIN_SETTINGS_DIR", os.path.join(script_directory, "tmp", "config"))
-
-if IS_CLI_ENV:
-    log_path_hint = getattr(decky, "DECKY_PLUGIN_LOG", os.path.join(log_dir, "decky.log"))
-    if FORCE_STDERR_LOGGING:
-        log_path_hint = "stderr"
-    # print(f"[decky-virtual-surround-sound] Log file: {log_path_hint}")
-
-if FORCE_STDERR_LOGGING:
-    decky.logger.info("Temporary plugin directories are not writable; routing logs to stderr only.")
 
 # Read settings
 settings = SettingsManager(name="settings", settings_directory=settings_dir)
@@ -342,13 +272,9 @@ class Plugin:
     async def _uninstall(self):
         decky.logger.info("Uninstalling service as background task")
         service_script = os.path.join(script_directory, "service.sh")
-        if FORCE_STDERR_LOGGING:
-            decky.logger.info("Temporary directories unavailable; service logs will flow to stderr")
-            cmd = f"{service_script} uninstall"
-        else:
-            timestamp = datetime.datetime.now().strftime("%Y-%m-%d_%H.%M.%S")
-            uninstall_log_path = os.path.join(logDir, f"uninstall_{timestamp}.log")
-            cmd = f"{service_script} uninstall &> {uninstall_log_path}"
+        timestamp = datetime.datetime.now().strftime("%Y-%m-%d_%H.%M.%S")
+        uninstall_log_path = os.path.join(log_dir, f"uninstall_{timestamp}.log")
+        cmd = f"{service_script} uninstall &> {uninstall_log_path}"
         os.spawnle(os.P_NOWAIT, "/bin/sh", "sh", "-c", cmd, subprocess_exec_env())
         # Clean up the HRIR file if it exists.
         decky.logger.info("Removing '%s' if it exists", hrir_dest_path)
